@@ -53,7 +53,7 @@ One FastAPI service, one admin panel. No zoo of microservices, no extra database
 - **Telegram** — a plain Bot API webhook. Message the bot, get an answer from the knowledge base — screenshots from the base come through as real photos, not link-dumps.
 - **WhatsApp** — the official Cloud API (Meta Business Platform). Same idea: message in, answer (and any relevant screenshot) out.
 
-Telegram and WhatsApp are newer here, so they're still a bit more basic: plain text only, per-chat memory but no rating collection yet, and no webhook signature verification (see [Connecting messaging channels](#connecting-messaging-channels) for what that means in practice). Pachca and Omnidesk have had more time in the oven — ratings, IP allowlisting, the works. They'll catch up if people actually end up using them.
+Telegram and WhatsApp are newer here, so they're still a bit more basic: plain text only, no conversation memory (each message is answered on its own — an earlier version kept per-chat history and it made the agent loop on old questions, so it's off on purpose for now), no rating collection, and no webhook signature verification (see [Connecting messaging channels](#connecting-messaging-channels) for what that means in practice). Pachca and Omnidesk have had more time in the oven — thread memory, ratings, IP allowlisting, the works. Telegram/WhatsApp will catch up if people actually end up using them.
 
 **Doesn't need much babysitting**
 - Password-protected admin panel with its own session — doesn't piggyback on any other login.
@@ -223,7 +223,7 @@ This is meant to run on a server you control, behind HTTPS. Set a real `ADMIN_PA
 - **Telegram** — обычный вебхук Bot API. Написали боту — получили ответ из базы знаний, а скриншоты из базы приходят настоящими фото, а не голыми ссылками.
 - **WhatsApp** — официальный Cloud API (Meta Business Platform). Та же идея: сообщение на вход, ответ (и нужный скриншот) на выход.
 
-Telegram и WhatsApp тут новенькие, поэтому пока попроще: только текстовые вопросы, память диалога уже есть, а вот сбора оценок и проверки подписи вебхука ещё нет (что это значит на практике — см. [«Подключение мессенджеров»](#подключение-мессенджеров)). У Пачки и Omnidesk опыта побольше: оценки ответов, список разрешённых IP, всё как надо. Дотянем Telegram и WhatsApp до того же уровня, если станет понятно, что это того стоит.
+Telegram и WhatsApp тут новенькие, поэтому пока попроще: только текстовые вопросы, без памяти диалога (каждое сообщение обрабатывается само по себе — раньше память была, но с ней агент зацикливался на старых вопросах, поэтому сейчас она намеренно выключена), без сбора оценок и без проверки подписи вебхука (что это значит на практике — см. [«Подключение мессенджеров»](#подключение-мессенджеров)). У Пачки и Omnidesk опыта побольше: память треда, оценки ответов, список разрешённых IP, всё как надо. Дотянем Telegram и WhatsApp до того же уровня, если станет понятно, что это того стоит.
 
 **Не требует особого присмотра**
 - Админ-панель с паролем и своей сессией — ни от кого чужого логина не зависит.

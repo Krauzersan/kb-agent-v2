@@ -3,6 +3,13 @@
 Базовый уровень: только текстовые сообщения на входе, без inline-кнопок. Картинки
 из базы знаний (пометки «[изображение...] URL» в ответе) отправляются нативными
 фото — Telegram сам скачивает их по прямой ссылке, заливать файл не нужно.
+
+Без памяти диалога — намеренно: каждый вопрос обрабатывается сам по себе, без
+истории треда (в отличие от Пачки, см. webhook.py). Раньше память была, но
+приводила к тому, что агент зацикливался на одном и том же вопросе; thread_key
+всё ещё передаётся в rag.answer_question — но только для группировки в логе/
+метриках, на сам ответ модели он не влияет.
+
 Без проверки secret_token (Telegram поддерживает его при setWebhook) — добавьте,
 если этот эндпоинт будет смотреть в интернет без другой защиты (см. README).
 """
@@ -12,7 +19,6 @@ import logging
 
 from fastapi import APIRouter, BackgroundTasks, Request, Response
 
-import convo
 import img_markers
 import rag
 import settings_store
@@ -52,10 +58,9 @@ def _is_allowed(message: dict) -> bool:
 
 
 def _handle(chat_id: int, question: str) -> None:
-    thread_key = f"telegram:{chat_id}"
+    thread_key = f"telegram:{chat_id}"  # только для группировки в логе/метриках, не память
     try:
-        history = convo.get(thread_key)
-        result = rag.answer_question(question, history=history, channel="external",
+        result = rag.answer_question(question, channel="external",
                                      thread_key=thread_key, asker_user_id=chat_id)
         answer = result["answer"]
         clean_text, images = img_markers.extract_images(answer)
@@ -63,8 +68,6 @@ def _handle(chat_id: int, question: str) -> None:
             telegram_client.send_message(chat_id, clean_text)
         for img in images:
             telegram_client.send_photo(chat_id, img["url"], caption=img["caption"])
-        convo.append(thread_key, "user", question)
-        convo.append(thread_key, "assistant", clean_text)
     except Exception:  # noqa: BLE001
         log.exception("Ошибка обработки Telegram-сообщения")
         telegram_client.send_message(chat_id, _ERROR_MSG)

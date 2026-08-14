@@ -3,6 +3,13 @@
 Базовый уровень: только текстовые сообщения на входе. Картинки из базы знаний
 (пометки «[изображение...] URL» в ответе) отправляются нативным вложением — Meta
 сама скачивает их по прямой ссылке, заливать файл не нужно.
+
+Без памяти диалога — намеренно: каждый вопрос обрабатывается сам по себе, без
+истории треда (в отличие от Пачки, см. webhook.py). Раньше память была, но
+приводила к тому, что агент зацикливался на одном и том же вопросе; thread_key
+всё ещё передаётся в rag.answer_question — но только для группировки в логе/
+метриках, на сам ответ модели он не влияет.
+
 GET-запрос — обязательное разовое подтверждение вебхука при подключении в кабинете
 Meta (hub.challenge). Проверка подписи X-Hub-Signature-256 не реализована —
 добавьте перед продакшеном, если этот эндпоинт будет смотреть в интернет без
@@ -15,7 +22,6 @@ import logging
 
 from fastapi import APIRouter, BackgroundTasks, Request, Response
 
-import convo
 import img_markers
 import rag
 import settings_store
@@ -49,10 +55,9 @@ def _is_allowed(from_number: str) -> bool:
 
 
 def _handle(from_number: str, question: str) -> None:
-    thread_key = f"whatsapp:{from_number}"
+    thread_key = f"whatsapp:{from_number}"  # только для группировки в логе/метриках, не память
     try:
-        history = convo.get(thread_key)
-        result = rag.answer_question(question, history=history, channel="external",
+        result = rag.answer_question(question, channel="external",
                                      thread_key=thread_key, asker_user_id=from_number)
         answer = result["answer"]
         clean_text, images = img_markers.extract_images(answer)
@@ -60,8 +65,6 @@ def _handle(from_number: str, question: str) -> None:
             whatsapp_client.send_message(from_number, clean_text)
         for img in images:
             whatsapp_client.send_image(from_number, img["url"], caption=img["caption"])
-        convo.append(thread_key, "user", question)
-        convo.append(thread_key, "assistant", clean_text)
     except Exception:  # noqa: BLE001
         log.exception("Ошибка обработки WhatsApp-сообщения")
         whatsapp_client.send_message(from_number, _ERROR_MSG)
