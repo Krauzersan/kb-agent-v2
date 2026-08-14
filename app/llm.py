@@ -82,38 +82,38 @@ def _dispatch_complete(provider: str, system: str, user: str, max_tokens: int) -
     return claude_client.complete(system, user, max_tokens=max_tokens)
 
 
-def ask(question: str, hits: List[dict], history=None, channel: str = "internal",
-        mode: str = "normal") -> str:
+def _with_fallback(dispatch, label: str = ""):
+    """Общий цикл ретраев для ask()/complete(): пробует провайдеров по порядку из
+    _fallback_order(), первый успешный ответ — возвращает. Если все упали — поднимает
+    исключение от ПОСЛЕДНЕГО из них (см. вызывающий код: rag.py ловит его и наверху,
+    и добавочным except Exception — на случай, если это не LLMNotConfigured)."""
     order = _fallback_order()
     last_exc: Exception | None = None
     for i, provider in enumerate(order):
         try:
-            answer = _dispatch_ask(provider, question, hits, history=history,
-                                   channel=channel, mode=mode)
+            result = dispatch(provider)
             if i > 0:
-                log.warning("LLM-фоллбэк: %s не ответил, ответ получен от %s",
-                           order[0], provider)
-            return answer
+                log.warning("LLM-фоллбэк%s: %s не ответил, ответ получен от %s",
+                           label, order[0], provider)
+            return result
         except Exception as e:  # noqa: BLE001
             last_exc = e
             more = f" — пробую следующий ({order[i + 1]})" if i + 1 < len(order) else ""
             log.warning("Провайдер %s не ответил (%s)%s", provider, e, more)
     raise last_exc
+
+
+def ask(question: str, hits: List[dict], history=None, channel: str = "internal",
+        mode: str = "normal") -> str:
+    return _with_fallback(
+        lambda provider: _dispatch_ask(provider, question, hits, history=history,
+                                       channel=channel, mode=mode)
+    )
 
 
 def complete(system: str, user: str, max_tokens: int = 400) -> str:
     """Служебный вызов модели без роли/правил агента (summary файлов, map-reduce)."""
-    order = _fallback_order()
-    last_exc: Exception | None = None
-    for i, provider in enumerate(order):
-        try:
-            answer = _dispatch_complete(provider, system, user, max_tokens)
-            if i > 0:
-                log.warning("LLM-фоллбэк (complete): %s не ответил, ответ получен от %s",
-                           order[0], provider)
-            return answer
-        except Exception as e:  # noqa: BLE001
-            last_exc = e
-            more = f" — пробую следующий ({order[i + 1]})" if i + 1 < len(order) else ""
-            log.warning("Провайдер %s не ответил (%s)%s", provider, e, more)
-    raise last_exc
+    return _with_fallback(
+        lambda provider: _dispatch_complete(provider, system, user, max_tokens),
+        label=" (complete)",
+    )

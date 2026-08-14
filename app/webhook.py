@@ -17,6 +17,7 @@ from fastapi import APIRouter, BackgroundTasks, Request, Response
 
 import convo
 import db
+import img_markers
 import pachca
 import rag
 import settings_store
@@ -26,7 +27,8 @@ log = logging.getLogger("webhook")
 router = APIRouter()
 
 # Ссылка на наши же картинки (из ZIP-импорта) в формате «[изображение: подпись] URL».
-_IMG_LINK_RE = re.compile(r'\[изображение(?::\s*([^\]]*))?\]\s+(\S+)')
+# Единственный источник этого regex — img_markers.py (его же используют Telegram/WhatsApp).
+_IMG_LINK_RE = img_markers.IMG_LINK_RE
 
 # Пачка не рендерит markdown-заголовки (#, ##) и горизонтальные линии (---) — показывает
 # их как есть, решётками/чёрточками. В промпте это запрещено, но модель время от времени

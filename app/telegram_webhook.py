@@ -95,11 +95,13 @@ async def telegram_webhook(request: Request, background: BackgroundTasks):
         return Response("ignored", status_code=200)
 
     if not _is_allowed(message):
-        telegram_client.send_message(chat_id, _DENIED_MSG)
+        # В фон — send_message синхронно бьёт по сети (httpx), держать на этом event loop
+        # не нужно (см. как это уже сделано ниже для _handle).
+        background.add_task(telegram_client.send_message, chat_id, _DENIED_MSG)
         return Response("OK", status_code=200)
 
     if text.startswith("/start"):
-        telegram_client.send_message(chat_id, _GREETING)
+        background.add_task(telegram_client.send_message, chat_id, _GREETING)
         return Response("OK", status_code=200)
 
     background.add_task(_handle, chat_id, text)

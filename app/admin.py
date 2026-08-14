@@ -1176,7 +1176,9 @@ async def settings_save(request: Request):
     # вебхук в Telegram сразу, без ручного curl (см. telegram_client.set_webhook).
     tg_status = ""
     if telegram_client.configured():
-        result = telegram_client.set_webhook()
+        # set_webhook бьёт по сети (httpx, до 15с) — settings_save асинхронный, поэтому
+        # в отдельном потоке, чтобы не подвесить event loop на время запроса к Telegram.
+        result = await run_in_threadpool(telegram_client.set_webhook)
         tg_status = "" if result.get("ok") else "&tg_webhook_err=1"
 
     return RedirectResponse(f"/admin/settings?saved=1{tg_status}", status_code=HTTP_303_SEE_OTHER)

@@ -286,6 +286,14 @@ def _answer_question(question: str, history=None, channel: str = "internal") -> 
         answer = llm.ask(question, hits, history=history, channel=channel)
     except llm.LLMNotConfigured as e:
         return {"answer": str(e), "sources": [], "hits": hits}
+    except Exception as e:  # noqa: BLE001
+        # С фоллбэком между провайдерами (llm.py) сюда может долететь исключение НЕ
+        # LLMNotConfigured — например если основной провайдер не настроен, а запасной
+        # настроен, но упал с реальной ошибкой API. Раньше единственным исходом здесь
+        # была LLMNotConfigured; ловим и остальное, чтобы не пробрасывать сырую ошибку
+        # пользователю в Пачку/Telegram/WhatsApp мимо дружелюбного сообщения.
+        log.exception("LLM не ответил ни через один из настроенных провайдеров")
+        return {"answer": f"Не получилось получить ответ от модели: {e}", "sources": [], "hits": hits}
 
     # уникальные имена файлов-источников (по порядку)
     sources, seen = [], set()
