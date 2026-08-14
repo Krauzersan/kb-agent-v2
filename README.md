@@ -1,23 +1,34 @@
 <h1 align="center">KB Agent</h1>
-<p align="center">A self-hosted RAG agent that turns your knowledge base into an AI that actually answers support questions correctly.</p>
+<p align="center"><em>Turn a pile of documents into a support agent that actually knows your business.</em></p>
 
 <p align="center">
   <img alt="Python" src="https://img.shields.io/badge/python-3.11-3776AB?logo=python&logoColor=white">
   <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white">
   <img alt="Docker" src="https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white">
   <img alt="Qdrant" src="https://img.shields.io/badge/vector%20store-Qdrant-DC244C">
+  <img alt="License" src="https://img.shields.io/badge/self--hosted-your%20server%2C%20your%20data-6E56CF">
 </p>
 
-<p align="center"><a href="#english">English</a> · <a href="#русский">Русский</a></p>
+<p align="center"><a href="#english"><strong>English</strong></a> &nbsp;·&nbsp; <a href="#русский"><strong>Русский</strong></a></p>
 
----
+<br>
 
 <a id="english"></a>
 ## English
 
-I built this because support agents kept answering the same questions differently depending on who was on shift — the actual answer was buried somewhere across a pile of PDFs, spreadsheets and old chat exports, and nobody had time to search through all of it every time a customer asked something. KB Agent is my answer to that: throw your documents at it, it indexes them for semantic search, and it can either answer questions directly through a built-in admin console or plug straight into your support channels and answer on its own.
+> I built this after one too many afternoons watching support agents give three different answers to the same question — not because anyone was careless, but because the real answer was buried in some PDF nobody had opened since it was written. KB Agent is the fix I wanted for myself: point it at your documents, and it turns into something you can actually *ask*, instead of a folder you have to *search*.
 
-It's a single FastAPI service, one admin panel, no separate moving parts to babysit.
+### Who it's for
+
+You don't need to be a company to get value out of this — it scales down just as well as it scales up.
+
+- **Small and medium businesses** that want consistent, correct support answers around the clock, without hiring someone whose whole job is babysitting a FAQ doc.
+- **Freelancers, consultants, and solo founders** who'd rather a client get an instant, accurate answer than wait until Monday for you to check your notes.
+- **Anyone automating their own corner of life** — a course you teach, a community you run, a side project's documentation, a family business where half the "process" lives in one person's head and nowhere else.
+
+If you can gather what you know into files, this will turn it into something people can talk to — through a chat window, or straight from Telegram, WhatsApp, or wherever your people already are.
+
+It's a single FastAPI service, one admin panel — no cluster of microservices to babysit, no separate vector database to run.
 
 ### What it does
 
@@ -157,9 +168,19 @@ This is meant to run on a server you control, behind HTTPS. Set a real `ADMIN_PA
 <a id="русский"></a>
 ## Русский
 
-Я сделал этого агента, потому что саппорт отвечал на одни и те же вопросы по-разному в зависимости от того, кто на смене — правильный ответ был где-то погребён среди кучи PDF-ов, таблиц и старых переписок, и перечитывать всё это каждый раз ни у кого не было времени. KB Agent — это решение: скармливаешь ему документы, он индексирует их для смыслового поиска, а дальше либо сам отвечает через встроенную админку, либо подключается напрямую к каналам поддержки и отвечает без вашего участия.
+> Я сделал этого агента после того, как в очередной раз посмотрел, как саппорт даёт три разных ответа на один и тот же вопрос — не потому что кто-то халтурил, а потому что правильный ответ лежал в каком-то PDF-е, который никто не открывал с момента, как его написали. KB Agent — это то, чего мне самому не хватало: скармливаешь ему документы, и вместо папки, которую нужно *перерывать*, получаешь то, у чего можно просто *спросить*.
 
-Это один FastAPI-сервис с одной админкой — не нужно поднимать и следить за кучей отдельных частей.
+### Кому это пригодится
+
+Чтобы получить пользу от этого агента, не обязательно быть компанией — он одинаково хорошо работает и в большом, и в малом масштабе.
+
+- **Малому и среднему бизнесу**, который хочет давать клиентам стабильные и правильные ответы круглосуточно, не нанимая отдельного человека, чья единственная работа — следить за актуальностью FAQ.
+- **Фрилансерам, консультантам и соло-основателям**, которым важнее, чтобы клиент получил точный ответ сразу, а не ждал до понедельника, пока вы найдёте время заглянуть в свои заметки.
+- **Всем, кто автоматизирует свой личный кусочек жизни** — курс, который вы ведёте, сообщество, которым управляете, документацию к пет-проекту, семейный бизнес, где половина «процессов» живёт исключительно в голове одного человека и больше нигде.
+
+Если вы можете собрать то, что знаете, в файлы — агент превратит это в то, с чем можно поговорить: через чат в админке или прямо из Telegram, WhatsApp и других мест, где уже находятся ваши люди.
+
+Это один FastAPI-сервис с одной админкой — не нужно поднимать и следить за зоопарком отдельных сервисов или отдельной векторной базой.
 
 ### Что умеет
 
@@ -294,3 +315,7 @@ kb-agent-v2/
 ### О безопасности
 
 Сервис рассчитан на запуск на своём сервере, за HTTPS. Перед тем как открывать его наружу, задайте настоящий `ADMIN_PASSWORD` и случайный `SESSION_SECRET`, а если хотите, чтобы ключи провайдеров хранились зашифрованными, а не в открытом виде в SQLite — задайте `ENCRYPTION_KEY`.
+
+---
+
+<p align="center">Built by someone who got tired of answering the same question three different ways.<br>Hope it saves you a few afternoons too. · Сделано тем, кто устал отвечать на один вопрос по-разному. Надеюсь, вам это сэкономит пару вечеров.</p>
