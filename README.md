@@ -120,21 +120,19 @@ Or skip the manual steps and run `sudo bash deploy/install.sh` from the repo roo
 
 Both integrations are basic on purpose: plain-text questions in, plain-text answers out, no signature verification on the webhook yet. That's fine behind a firewall or for a low-traffic bot; if the endpoint is going to sit on the open internet and get real traffic, add Telegram's `secret_token` header check or WhatsApp's `X-Hub-Signature-256` verification before relying on it (both endpoints are short, single-purpose files — `app/telegram_webhook.py` and `app/whatsapp_webhook.py` — easy to extend).
 
+Both also support an allowlist — a list of Telegram usernames/IDs or WhatsApp phone numbers, set in the same Settings tab. Leave it empty and the bot answers whoever writes to it; fill it in and everyone else gets a polite "no access" reply instead of an answer.
+
 **Telegram**
 
 1. Message [@BotFather](https://t.me/BotFather), run `/newbot`, grab the token it gives you.
-2. Paste it into the admin panel: **Settings → Telegram**, save. Takes effect immediately, no restart.
-3. Point Telegram at your webhook (needs HTTPS):
-   ```bash
-   curl "https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://your-domain.com/webhook/telegram"
-   ```
-4. Message the bot. It should answer from the knowledge base.
+2. Paste it into the admin panel: **Settings → Telegram**, save. That's it — the app registers the webhook with Telegram itself (needs `public_base_url` set on the Search tab; the Settings page tells you if that's missing).
+3. Message the bot. It should answer from the knowledge base.
 
 **WhatsApp** (official Cloud API, via [Meta for Developers](https://developers.facebook.com))
 
 1. Create an app, add the **WhatsApp** product, and grab a test phone number (or your own verified one) — this gives you a Phone Number ID and a temporary access token; generate a permanent one under System Users before going live.
 2. In the admin panel: **Settings → WhatsApp**, paste the access token and Phone Number ID, make up any string for the verify token — Meta just echoes it back to prove you control the endpoint. Save.
-3. In the app's WhatsApp → Configuration screen, set the webhook URL to `https://your-domain.com/webhook/whatsapp`, paste the same verify token, and subscribe to the **messages** field. Meta will call the endpoint with a GET request first — it only succeeds if the verify token matches.
+3. Meta doesn't offer an API for this next part, so it's the one manual step: in the app's WhatsApp → Configuration screen, set the webhook URL to `https://your-domain.com/webhook/whatsapp`, paste the same verify token, and subscribe to the **messages** field. Meta calls the endpoint with a GET request first — it only succeeds if the verify token matches.
 4. Message the test number from WhatsApp. It should answer from the knowledge base.
 
 ### Configuration
@@ -292,21 +290,19 @@ venv/bin/uvicorn main:app --app-dir app --host 0.0.0.0 --port 8746
 
 Обе интеграции намеренно базовые: текст вопроса на входе, текст ответа на выходе, без проверки подписи вебхука. Для закрытого сервера или бота с небольшим трафиком этого достаточно; если эндпоинт будет смотреть в открытый интернет и получать реальный трафик — добавьте проверку заголовка `secret_token` у Telegram или `X-Hub-Signature-256` у WhatsApp, прежде чем полагаться на это всерьёз (оба эндпоинта — короткие файлы на одну задачу: `app/telegram_webhook.py` и `app/whatsapp_webhook.py`, дополнить несложно).
 
+В обеих есть список разрешённых пользователей — задаётся там же, во вкладке «Настройки». Пусто — отвечает всем, кто напишет. Заполнено (username/id для Telegram, номера для WhatsApp) — остальным вместо ответа приходит вежливый отказ.
+
 **Telegram**
 
 1. Напишите [@BotFather](https://t.me/BotFather), выполните `/newbot`, заберите токен.
-2. Вставьте его в админке: **Настройки → Telegram**, сохраните. Применяется сразу, без перезапуска.
-3. Укажите Telegram адрес вебхука (нужен HTTPS):
-   ```bash
-   curl "https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://ваш-домен.ru/webhook/telegram"
-   ```
-4. Напишите боту — должен ответить по базе знаний.
+2. Вставьте его в админке: **Настройки → Telegram**, сохраните. И всё — сервис сам зарегистрирует вебхук в Telegram (для этого на вкладке «Поиск» должен быть заполнен «Публичный адрес сервиса»; если нет — страница настроек так и скажет).
+3. Напишите боту — должен ответить по базе знаний.
 
 **WhatsApp** (официальный Cloud API, через [Meta for Developers](https://developers.facebook.com))
 
 1. Создайте приложение, добавьте продукт **WhatsApp**, возьмите тестовый номер (или подключите свой верифицированный) — получите Phone Number ID и временный токен; постоянный токен генерируется позже в System Users, перед запуском в прод.
 2. В админке: **Настройки → WhatsApp**, вставьте access-токен и Phone Number ID, в поле verify-токена — любая произвольная строка на ваш выбор: Meta просто вернёт её же, чтобы подтвердить, что вы владеете эндпоинтом. Сохраните.
-3. В настройках приложения (WhatsApp → Configuration) укажите адрес вебхука `https://ваш-домен.ru/webhook/whatsapp`, тот же verify-токен, подпишитесь на событие **messages**. Meta сначала сделает GET-запрос — он пройдёт, только если verify-токен совпадёт.
+3. Этот шаг API от Meta не предусматривает, так что он единственный ручной: в настройках приложения (WhatsApp → Configuration) укажите адрес вебхука `https://ваш-домен.ru/webhook/whatsapp`, тот же verify-токен, подпишитесь на событие **messages**. Meta сначала сделает GET-запрос — он пройдёт, только если verify-токен совпадёт.
 4. Напишите на тестовый номер в WhatsApp — должен ответить по базе знаний.
 
 ### Конфигурация

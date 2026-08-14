@@ -15,6 +15,7 @@ from fastapi import APIRouter, BackgroundTasks, Request, Response
 import convo
 import img_markers
 import rag
+import settings_store
 import telegram_client
 
 log = logging.getLogger("telegram_webhook")
@@ -26,6 +27,28 @@ _MAX_PROCESSED = 5000
 
 _GREETING = "Здравствуйте! Задайте вопрос — постараюсь ответить по базе знаний."
 _ERROR_MSG = "Не получилось ответить из-за внутренней ошибки, попробуйте ещё раз чуть позже."
+_DENIED_MSG = "Извините, у вас нет доступа к этому боту. Обратитесь к администратору."
+
+
+def _parse_allowed(raw: str) -> set[str]:
+    items = set()
+    for chunk in (raw or "").replace(",", "\n").splitlines():
+        v = chunk.strip().lstrip("@").lower()
+        if v:
+            items.add(v)
+    return items
+
+
+def _is_allowed(message: dict) -> bool:
+    """Пусто в настройках = отвечаем всем (как раньше). Иначе сверяем числовой
+    user_id и @username автора сообщения со списком в настройках."""
+    allowed = _parse_allowed(settings_store.get("telegram_allowed_users"))
+    if not allowed:
+        return True
+    frm = message.get("from") or {}
+    user_id = str(frm.get("id") or "")
+    username = (frm.get("username") or "").lower()
+    return user_id in allowed or (username and username in allowed)
 
 
 def _handle(chat_id: int, question: str) -> None:
@@ -70,6 +93,10 @@ async def telegram_webhook(request: Request, background: BackgroundTasks):
     text = (message.get("text") or "").strip()
     if not chat_id or not text:
         return Response("ignored", status_code=200)
+
+    if not _is_allowed(message):
+        telegram_client.send_message(chat_id, _DENIED_MSG)
+        return Response("OK", status_code=200)
 
     if text.startswith("/start"):
         telegram_client.send_message(chat_id, _GREETING)

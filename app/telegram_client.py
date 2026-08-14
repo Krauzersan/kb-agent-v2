@@ -63,3 +63,43 @@ def send_photo(chat_id: int | str, photo_url: str, caption: str = "") -> dict | 
     except Exception as e:  # noqa: BLE001
         log.error("Telegram sendPhoto error: %s", e)
         return None
+
+
+def webhook_url() -> str:
+    """Публичный адрес нашего вебхука — тот же public_base_url, что используется
+    для ссылок на картинки (вкладка «Настройки» → Поиск)."""
+    base = (settings_store.get("public_base_url") or "").rstrip("/")
+    return f"{base}/webhook/telegram" if base else ""
+
+
+def set_webhook() -> dict:
+    """Регистрирует вебхук в Telegram сама — без ручного curl. Вызывается при каждом
+    сохранении настроек (см. admin.py), так что при смене токена/адреса всё
+    переподключается само по себе."""
+    url = webhook_url()
+    if not configured():
+        return {"ok": False, "description": "токен бота не задан"}
+    if not url:
+        return {"ok": False, "description": "не задан публичный адрес сервиса (вкладка «Поиск»)"}
+    try:
+        r = httpx.post(_api_url("setWebhook"), json={"url": url}, timeout=15)
+        data = r.json()
+        if not data.get("ok"):
+            log.error("Telegram setWebhook не удался: %s", data)
+        return data
+    except Exception as e:  # noqa: BLE001
+        log.error("Telegram setWebhook error: %s", e)
+        return {"ok": False, "description": str(e)}
+
+
+def webhook_info() -> dict | None:
+    """Для отображения статуса в админке — что Telegram реально знает о нашем вебхуке."""
+    if not configured():
+        return None
+    try:
+        r = httpx.get(_api_url("getWebhookInfo"), timeout=10)
+        data = r.json()
+        return data.get("result") if data.get("ok") else None
+    except Exception as e:  # noqa: BLE001
+        log.error("Telegram getWebhookInfo error: %s", e)
+        return None

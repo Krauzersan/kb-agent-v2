@@ -166,10 +166,16 @@ DEFAULTS: dict[str, object] = {
     "omnidesk_reply_as_note": False,  # отвечать внутренней заметкой (для проверки человеком)
     # Telegram (базовый уровень интеграции — см. telegram_client.py/telegram_webhook.py)
     "telegram_bot_token": "",       # токен от @BotFather
+    # Кому бот отвечает: пусто = всем, кто напишет. Иначе — список через запятую или
+    # с новой строки: числовой user_id и/или @username (без учёта регистра).
+    "telegram_allowed_users": "",
     # WhatsApp Cloud API, Meta Business Platform (базовый уровень интеграции)
     "whatsapp_access_token": "",    # постоянный access-токен из Meta for Developers
     "whatsapp_phone_number_id": "",  # Phone Number ID оттуда же
     "whatsapp_verify_token": "",    # придуманная строка для подтверждения вебхука (GET)
+    # Кому бот отвечает: пусто = всем, иначе — номера через запятую/с новой строки,
+    # в том же формате, что присылает WhatsApp (цифры, без "+").
+    "whatsapp_allowed_numbers": "",
 }
 
 # Какие поля считаются «секретными» (маскируются в интерфейсе)

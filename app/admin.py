@@ -29,6 +29,7 @@ import maintenance
 import progress
 import rag
 import settings_store
+import telegram_client
 import topics
 import vectorstore
 from config import settings
@@ -1108,11 +1109,13 @@ def test_question_legacy(request: Request):
 # ---------- настройки и API-ключи ----------
 
 @router.get("/admin/settings", response_class=HTMLResponse)
-def settings_page(request: Request, saved: int = 0):
+def settings_page(request: Request, saved: int = 0, tg_webhook_err: int = 0):
     auth.require_login(request)
     ctx = _base_ctx(request)
     ctx.update({"s": settings_store.all_for_form(), "saved": bool(saved),
-                "gigachat_cert": gigachat_client.cert_status()})
+                "gigachat_cert": gigachat_client.cert_status(),
+                "tg_webhook_err": bool(tg_webhook_err),
+                "tg_webhook": telegram_client.webhook_info() if telegram_client.configured() else None})
     return templates.TemplateResponse("settings.html", ctx)
 
 
@@ -1143,7 +1146,7 @@ async def settings_save(request: Request):
                 "search_mode", "public_base_url",
                 "pachca_api_url", "pachca_allowed_ip", "reaction_indicator",
                 "omnidesk_domain", "omnidesk_staff_email", "omnidesk_staff_id",
-                "whatsapp_phone_number_id"]:
+                "whatsapp_phone_number_id", "telegram_allowed_users", "whatsapp_allowed_numbers"]:
         if key in form:
             settings_store.set_value(key, form.get(key))
 
@@ -1169,7 +1172,14 @@ async def settings_save(request: Request):
         if val:
             settings_store.set_value(key, val)
 
-    return RedirectResponse("/admin/settings?saved=1", status_code=HTTP_303_SEE_OTHER)
+    # Токен и/или публичный адрес могли поменяться в этом же сохранении — перерегистрируем
+    # вебхук в Telegram сразу, без ручного curl (см. telegram_client.set_webhook).
+    tg_status = ""
+    if telegram_client.configured():
+        result = telegram_client.set_webhook()
+        tg_status = "" if result.get("ok") else "&tg_webhook_err=1"
+
+    return RedirectResponse(f"/admin/settings?saved=1{tg_status}", status_code=HTTP_303_SEE_OTHER)
 
 
 # ---------- массовая загрузка из папки на сервере ----------

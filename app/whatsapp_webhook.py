@@ -29,6 +29,23 @@ _processed: set[str] = set()
 _MAX_PROCESSED = 5000
 
 _ERROR_MSG = "Не получилось ответить из-за внутренней ошибки, попробуйте ещё раз чуть позже."
+_DENIED_MSG = "Извините, у вас нет доступа к этому боту. Обратитесь к администратору."
+
+
+def _parse_allowed(raw: str) -> set[str]:
+    items = set()
+    for chunk in (raw or "").replace(",", "\n").splitlines():
+        v = chunk.strip().lstrip("+")
+        if v:
+            items.add(v)
+    return items
+
+
+def _is_allowed(from_number: str) -> bool:
+    """Пусто в настройках = отвечаем всем (как раньше). Иначе сверяем номер
+    отправителя (как его прислал WhatsApp — цифры без "+") со списком в настройках."""
+    allowed = _parse_allowed(settings_store.get("whatsapp_allowed_numbers"))
+    return not allowed or from_number in allowed
 
 
 def _handle(from_number: str, question: str) -> None:
@@ -87,6 +104,9 @@ async def whatsapp_webhook(request: Request, background: BackgroundTasks):
                     from_number = msg.get("from")
                     text = (msg.get("text") or {}).get("body", "").strip()
                     if not from_number or not text:
+                        continue
+                    if not _is_allowed(from_number):
+                        background.add_task(whatsapp_client.send_message, from_number, _DENIED_MSG)
                         continue
                     background.add_task(_handle, from_number, text)
     except Exception:  # noqa: BLE001

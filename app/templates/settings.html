@@ -422,17 +422,44 @@
   <div class="pane" data-p="telegram">
     <div class="card">
       <h2>Telegram</h2>
-      <p class="desc">Бот отвечает на сообщения в Telegram. Базовый уровень: только текст, без
-        проверки подписи вебхука — подробнее в README проекта.</p>
+      <p class="desc">Бот отвечает на сообщения в Telegram. Только текст, без проверки подписи
+        вебхука — подробнее в README проекта.</p>
       <div class="field">
         <label>Токен бота (от @BotFather)
           {% if s.telegram_bot_token__is_set %}<span class="badge ok">сохранён</span>{% else %}<span class="badge err">не задан</span>{% endif %}
         </label>
         <input type="password" name="telegram_bot_token" placeholder="123456:ABC-DEF... (пусто = оставить как есть)">
       </div>
-      <p class="hint">После сохранения токена укажите Telegram адрес вебхука (один раз, из терминала):<br>
-        <code>curl "https://api.telegram.org/bot&lt;ТОКЕН&gt;/setWebhook?url=https://ваш-домен/webhook/telegram"</code>
-      </p>
+
+      {% if s.telegram_bot_token__is_set %}
+        {% if tg_webhook_err %}
+          <div class="alert err" style="margin:10px 0">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 8v4m0 4h.01M12 2 2 20h20L12 2z"/></svg>
+            <div class="txt">Не удалось подключить вебхук — проверьте токен и что «Публичный адрес сервиса»
+              на вкладке «Поиск» указан правильно (нужен настоящий HTTPS-адрес, доступный из интернета).</div>
+          </div>
+        {% elif tg_webhook and tg_webhook.url %}
+          <p class="hint"><span class="badge ok">вебхук подключён</span> — {{ tg_webhook.url }}</p>
+        {% else %}
+          <p class="hint"><span class="badge err">вебхук не подключён</span> — заполните «Публичный адрес
+            сервиса» на вкладке «Поиск» и сохраните настройки ещё раз.</p>
+        {% endif %}
+      {% else %}
+        <p class="hint">Вебхук подключается сам при сохранении токена — вставлять адрес вручную
+          через curl не нужно. Единственное условие: на вкладке «Поиск» должен быть заполнен
+          «Публичный адрес сервиса» (реальный HTTPS-домен, а не localhost).</p>
+      {% endif %}
+
+      <div class="field" style="margin-top:14px">
+        <label>Кому бот отвечает</label>
+        <textarea name="telegram_allowed_users" rows="3" placeholder="пусто = отвечает всем&#10;иначе — по одному на строку: @username или числовой id"
+                  style="width:100%; resize:vertical; font:inherit; padding:10px 12px;
+                  border:1px solid var(--line-2); border-radius:var(--r); background:var(--surface-2);
+                  color:inherit">{{ s.telegram_allowed_users }}</textarea>
+        <span class="hint">Кто угодно может написать боту в Telegram — если это нежелательно (не только
+          свои сотрудники/клиенты), впишите сюда @username или числовой id тех, кому можно. Остальным бот
+          вежливо откажет вместо ответа. Свой id/username можно узнать, написав боту <a href="https://t.me/userinfobot" target="_blank" rel="noopener">@userinfobot</a>.</span>
+      </div>
     </div>
   </div>
 
@@ -460,7 +487,19 @@
       </div>
       <p class="hint">В кабинете Meta (WhatsApp → Configuration) укажите адрес вебхука
         <code>https://ваш-домен/webhook/whatsapp</code>, тот же verify-токен, и подпишитесь на
-        событие <b>messages</b>.</p>
+        событие <b>messages</b>. Это единственный шаг, который нужно сделать руками — сам Meta
+        требует настраивать вебхук в своём кабинете, автоматически это не обойти.</p>
+
+      <div class="field" style="margin-top:14px">
+        <label>Кому бот отвечает</label>
+        <textarea name="whatsapp_allowed_numbers" rows="3" placeholder="пусто = отвечает всем&#10;иначе — по одному номеру на строку, в формате как присылает WhatsApp (цифры, без +)"
+                  style="width:100%; resize:vertical; font:inherit; padding:10px 12px;
+                  border:1px solid var(--line-2); border-radius:var(--r); background:var(--surface-2);
+                  color:inherit">{{ s.whatsapp_allowed_numbers }}</textarea>
+        <span class="hint">Написать на бизнес-номер в WhatsApp может кто угодно — если это
+          нежелательно, впишите сюда номера тех, кому можно отвечать. Остальным бот вежливо
+          откажет вместо ответа.</span>
+      </div>
     </div>
   </div>
 
