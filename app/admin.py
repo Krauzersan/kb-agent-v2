@@ -1142,7 +1142,8 @@ async def settings_save(request: Request):
                 "claude_proxy", "top_k", "priority_boost", "min_relevance",
                 "search_mode", "public_base_url",
                 "pachca_api_url", "pachca_allowed_ip", "reaction_indicator",
-                "omnidesk_domain", "omnidesk_staff_email", "omnidesk_staff_id"]:
+                "omnidesk_domain", "omnidesk_staff_email", "omnidesk_staff_id",
+                "whatsapp_phone_number_id"]:
         if key in form:
             settings_store.set_value(key, form.get(key))
 
@@ -1162,7 +1163,8 @@ async def settings_save(request: Request):
     # Секреты обновляем ТОЛЬКО если поле непустое (пустое = «оставить как было»).
     for key in ["anthropic_api_key", "openai_api_key", "deepseek_api_key", "gigachat_auth_key",
                 "pachca_bot_token", "pachca_webhook_secret",
-                "omnidesk_api_key", "omnidesk_webhook_token"]:
+                "omnidesk_api_key", "omnidesk_webhook_token",
+                "telegram_bot_token", "whatsapp_access_token", "whatsapp_verify_token"]:
         val = (form.get(key) or "").strip()
         if val:
             settings_store.set_value(key, val)

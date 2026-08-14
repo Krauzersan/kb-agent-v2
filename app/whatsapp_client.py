@@ -1,7 +1,7 @@
 """Минимальный клиент WhatsApp Cloud API (Meta) — только отправка ответа.
 
-Официальная WhatsApp Business Platform, не WhatsApp Web. Нужен постоянный
-access-токен и Phone Number ID из кабинета Meta for Developers — см. README.
+Официальная WhatsApp Business Platform, не WhatsApp Web. Токен и Phone Number ID
+вводятся в админ-панели (вкладка «Настройки» → WhatsApp) и хранятся в settings_store.
 """
 from __future__ import annotations
 
@@ -9,26 +9,34 @@ import logging
 
 import httpx
 
-from config import settings
+import settings_store
 
 log = logging.getLogger("whatsapp")
 
 _API_VERSION = "v21.0"
 
 
+def _token() -> str:
+    return (settings_store.get("whatsapp_access_token") or "").strip()
+
+
+def _phone_number_id() -> str:
+    return (settings_store.get("whatsapp_phone_number_id") or "").strip()
+
+
 def configured() -> bool:
-    return bool(settings.WHATSAPP_ACCESS_TOKEN and settings.WHATSAPP_PHONE_NUMBER_ID)
+    return bool(_token() and _phone_number_id())
 
 
 def _api_url() -> str:
-    return f"https://graph.facebook.com/{_API_VERSION}/{settings.WHATSAPP_PHONE_NUMBER_ID}/messages"
+    return f"https://graph.facebook.com/{_API_VERSION}/{_phone_number_id()}/messages"
 
 
 def send_message(to: str, text: str) -> dict | None:
     if not configured():
-        log.warning("WhatsApp не настроен — пусто WHATSAPP_ACCESS_TOKEN/WHATSAPP_PHONE_NUMBER_ID")
+        log.warning("WhatsApp не настроен — access-токен или Phone Number ID не заданы в настройках")
         return None
-    headers = {"Authorization": f"Bearer {settings.WHATSAPP_ACCESS_TOKEN}"}
+    headers = {"Authorization": f"Bearer {_token()}"}
     payload = {
         "messaging_product": "whatsapp",
         "to": to,

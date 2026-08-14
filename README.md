@@ -52,7 +52,7 @@ One FastAPI service, one admin panel. No zoo of microservices, no extra database
 - **Telegram** — a plain Bot API webhook. Message the bot, get an answer from the knowledge base.
 - **WhatsApp** — the official Cloud API (Meta Business Platform). Same idea: message in, answer out.
 
-Quick honesty check: Telegram and WhatsApp are the new kids here, so they're a bit more basic — plain text only, tokens live in `.env` instead of the admin panel (see [Connecting messaging channels](#connecting-messaging-channels)). Pachca and Omnidesk have had more time in the oven — full settings-panel treatment, thread memory, ratings, the works. Telegram/WhatsApp will get there too if it turns out people actually want that.
+Quick honesty check: Telegram and WhatsApp are the new kids here, so they're still a bit more basic — plain text only, per-chat memory but no rating collection, and no webhook signature verification yet (see [Connecting messaging channels](#connecting-messaging-channels) for what that means in practice). Tokens, though, live in the same place as everything else now — the Settings tab, no `.env` editing needed. Pachca and Omnidesk have had more time in the oven — ratings, native image replies, IP allowlisting, the works. Telegram/WhatsApp will get there too if it turns out people actually want that.
 
 **Doesn't need much babysitting**
 - Password-protected admin panel with its own session — doesn't piggyback on any other login.
@@ -106,7 +106,7 @@ Both integrations are basic on purpose: plain-text questions in, plain-text answ
 **Telegram**
 
 1. Message [@BotFather](https://t.me/BotFather), run `/newbot`, grab the token it gives you.
-2. Put it in `.env` as `TELEGRAM_BOT_TOKEN`, restart the service.
+2. Paste it into the admin panel: **Settings → Telegram**, save. Takes effect immediately, no restart.
 3. Point Telegram at your webhook (needs HTTPS):
    ```bash
    curl "https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://your-domain.com/webhook/telegram"
@@ -116,13 +116,13 @@ Both integrations are basic on purpose: plain-text questions in, plain-text answ
 **WhatsApp** (official Cloud API, via [Meta for Developers](https://developers.facebook.com))
 
 1. Create an app, add the **WhatsApp** product, and grab a test phone number (or your own verified one) — this gives you a Phone Number ID and a temporary access token; generate a permanent one under System Users before going live.
-2. Put `WHATSAPP_ACCESS_TOKEN` and `WHATSAPP_PHONE_NUMBER_ID` in `.env`. Make up any string for `WHATSAPP_VERIFY_TOKEN` — Meta just echoes it back to prove you control the endpoint.
-3. In the app's WhatsApp → Configuration screen, set the webhook URL to `https://your-domain.com/webhook/whatsapp`, paste the same verify token, and subscribe to the **messages** field. Meta will call the endpoint with a GET request first — it only succeeds if `WHATSAPP_VERIFY_TOKEN` matches.
+2. In the admin panel: **Settings → WhatsApp**, paste the access token and Phone Number ID, make up any string for the verify token — Meta just echoes it back to prove you control the endpoint. Save.
+3. In the app's WhatsApp → Configuration screen, set the webhook URL to `https://your-domain.com/webhook/whatsapp`, paste the same verify token, and subscribe to the **messages** field. Meta will call the endpoint with a GET request first — it only succeeds if the verify token matches.
 4. Message the test number from WhatsApp. It should answer from the knowledge base.
 
 ### Configuration
 
-Everything in `.env` is infrastructure only — ports, storage location, the admin password. API keys and third-party tokens for Claude/Pachca/Omnidesk are configured later, from the admin panel, and stored encrypted; Telegram/WhatsApp are the exception for now (see above).
+Everything in `.env` is infrastructure only — ports, storage location, the admin password. All API keys and third-party tokens (Claude/OpenAI/DeepSeek/GigaChat, Pachca, Omnidesk, Telegram, WhatsApp) are configured from the admin panel's Settings tab and stored encrypted — none of them live in `.env`.
 
 | Variable | Default | What it's for |
 |---|---|---|
@@ -133,10 +133,6 @@ Everything in `.env` is infrastructure only — ports, storage location, the adm
 | `SESSION_SECRET` | — | Signs session cookies — generate a random value, don't reuse it |
 | `SESSION_COOKIE_NAME` | `session` | Only matters if you run more than one instance on the same domain |
 | `ENCRYPTION_KEY` | *(empty)* | Optional key to encrypt stored API keys/tokens at rest |
-| `TELEGRAM_BOT_TOKEN` | *(empty)* | Bot token from @BotFather — leave empty to disable the channel |
-| `WHATSAPP_ACCESS_TOKEN` | *(empty)* | Permanent access token from Meta for Developers |
-| `WHATSAPP_PHONE_NUMBER_ID` | *(empty)* | Phone Number ID from the same place |
-| `WHATSAPP_VERIFY_TOKEN` | *(empty)* | Any string you pick — used only for the webhook handshake |
 
 ### Project layout
 
@@ -205,7 +201,7 @@ This is meant to run on a server you control, behind HTTPS. Set a real `ADMIN_PA
 - **Telegram** — обычный вебхук Bot API. Написали боту — получили ответ из базы знаний.
 - **WhatsApp** — официальный Cloud API (Meta Business Platform). Та же идея: сообщение на вход, ответ на выход.
 
-Честно говоря: Telegram и WhatsApp тут новенькие, поэтому чуть попроще — только текст, токены живут в `.env`, а не в админке (см. [«Подключение мессенджеров»](#подключение-мессенджеров)). У Пачки и Omnidesk опыта побольше — полноценные настройки в админке, память треда, оценки ответов, всё как надо. Telegram/WhatsApp дотянем до того же уровня, если станет понятно, что оно того стоит.
+Честно говоря: Telegram и WhatsApp тут новенькие, поэтому чуть попроще — только текст, память диалога есть, а вот сбора оценок и проверки подписи вебхука пока нет (см. [«Подключение мессенджеров»](#подключение-мессенджеров), что это значит на практике). А вот токены теперь там же, где и всё остальное — во вкладке «Настройки», редактировать `.env` не нужно. У Пачки и Omnidesk опыта побольше — оценки ответов, картинки нативным вложением, список разрешённых IP, всё как надо. Telegram/WhatsApp дотянем до того же уровня, если станет понятно, что оно того стоит.
 
 **Не требует особого присмотра**
 - Админ-панель с паролем и своей сессией — ни от кого чужого логина не зависит.
@@ -260,7 +256,7 @@ venv/bin/uvicorn main:app --app-dir app --host 0.0.0.0 --port 8746
 **Telegram**
 
 1. Напишите [@BotFather](https://t.me/BotFather), выполните `/newbot`, заберите токен.
-2. Впишите его в `.env` как `TELEGRAM_BOT_TOKEN`, перезапустите сервис.
+2. Вставьте его в админке: **Настройки → Telegram**, сохраните. Применяется сразу, без перезапуска.
 3. Укажите Telegram адрес вебхука (нужен HTTPS):
    ```bash
    curl "https://api.telegram.org/bot<TOKEN>/setWebhook?url=https://ваш-домен.ru/webhook/telegram"
@@ -270,13 +266,13 @@ venv/bin/uvicorn main:app --app-dir app --host 0.0.0.0 --port 8746
 **WhatsApp** (официальный Cloud API, через [Meta for Developers](https://developers.facebook.com))
 
 1. Создайте приложение, добавьте продукт **WhatsApp**, возьмите тестовый номер (или подключите свой верифицированный) — получите Phone Number ID и временный токен; постоянный токен генерируется позже в System Users, перед запуском в прод.
-2. Впишите `WHATSAPP_ACCESS_TOKEN` и `WHATSAPP_PHONE_NUMBER_ID` в `.env`. В `WHATSAPP_VERIFY_TOKEN` — любая произвольная строка: Meta просто вернёт её же, чтобы подтвердить, что вы владеете эндпоинтом.
-3. В настройках приложения (WhatsApp → Configuration) укажите адрес вебхука `https://ваш-домен.ru/webhook/whatsapp`, тот же verify-токен, подпишитесь на событие **messages**. Meta сначала сделает GET-запрос — он пройдёт, только если `WHATSAPP_VERIFY_TOKEN` совпадёт.
+2. В админке: **Настройки → WhatsApp**, вставьте access-токен и Phone Number ID, в поле verify-токена — любая произвольная строка на ваш выбор: Meta просто вернёт её же, чтобы подтвердить, что вы владеете эндпоинтом. Сохраните.
+3. В настройках приложения (WhatsApp → Configuration) укажите адрес вебхука `https://ваш-домен.ru/webhook/whatsapp`, тот же verify-токен, подпишитесь на событие **messages**. Meta сначала сделает GET-запрос — он пройдёт, только если verify-токен совпадёт.
 4. Напишите на тестовый номер в WhatsApp — должен ответить по базе знаний.
 
 ### Конфигурация
 
-Всё, что в `.env` — исключительно инфраструктура: порт, где хранить данные, пароль админки. Ключи Claude/Пачки/Omnidesk настраиваются позже, из админки, и хранятся зашифрованными; Telegram/WhatsApp пока исключение (см. выше).
+Всё, что в `.env` — исключительно инфраструктура: порт, где хранить данные, пароль админки. Все API-ключи и токены (Claude/OpenAI/DeepSeek/GigaChat, Пачка, Omnidesk, Telegram, WhatsApp) настраиваются из вкладки «Настройки» в админке и хранятся зашифрованными — ни один из них не лежит в `.env`.
 
 | Переменная | По умолчанию | Назначение |
 |---|---|---|
@@ -287,10 +283,6 @@ venv/bin/uvicorn main:app --app-dir app --host 0.0.0.0 --port 8746
 | `SESSION_SECRET` | — | Подписывает сессионные куки — сгенерируйте случайное значение |
 | `SESSION_COOKIE_NAME` | `session` | Важно только если на одном домене крутится несколько копий |
 | `ENCRYPTION_KEY` | *(пусто)* | Опциональный ключ для шифрования хранимых ключей/токенов |
-| `TELEGRAM_BOT_TOKEN` | *(пусто)* | Токен от @BotFather — пусто значит канал выключен |
-| `WHATSAPP_ACCESS_TOKEN` | *(пусто)* | Постоянный токен доступа из Meta for Developers |
-| `WHATSAPP_PHONE_NUMBER_ID` | *(пусто)* | Phone Number ID оттуда же |
-| `WHATSAPP_VERIFY_TOKEN` | *(пусто)* | Любая строка на ваш выбор — только для подтверждения вебхука |
 
 ### Структура проекта
 

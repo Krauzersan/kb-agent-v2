@@ -14,8 +14,8 @@ from fastapi import APIRouter, BackgroundTasks, Request, Response
 
 import convo
 import rag
+import settings_store
 import whatsapp_client
-from config import settings
 
 log = logging.getLogger("whatsapp_webhook")
 router = APIRouter()
@@ -48,7 +48,7 @@ async def whatsapp_verify(request: Request):
     mode = request.query_params.get("hub.mode")
     token = request.query_params.get("hub.verify_token") or ""
     challenge = request.query_params.get("hub.challenge") or ""
-    expected = settings.WHATSAPP_VERIFY_TOKEN
+    expected = (settings_store.get("whatsapp_verify_token") or "").strip()
     if mode == "subscribe" and expected and hmac.compare_digest(token, expected):
         return Response(challenge, status_code=200)
     return Response("forbidden", status_code=403)

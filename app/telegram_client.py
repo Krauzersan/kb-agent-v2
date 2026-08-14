@@ -1,7 +1,8 @@
 """Минимальный клиент Telegram Bot API — только отправка ответа.
 
 Базовый уровень интеграции: без клавиатур, без форматирования, без ретраев.
-Токен берётся из .env (TELEGRAM_BOT_TOKEN), не из settings_store — см. заметку в config.py.
+Токен вводится в админ-панели (вкладка «Настройки» → Telegram) и хранится
+в settings_store, как у остальных провайдеров/интеграций.
 """
 from __future__ import annotations
 
@@ -9,22 +10,26 @@ import logging
 
 import httpx
 
-from config import settings
+import settings_store
 
 log = logging.getLogger("telegram")
 
 
+def _token() -> str:
+    return (settings_store.get("telegram_bot_token") or "").strip()
+
+
 def configured() -> bool:
-    return bool(settings.TELEGRAM_BOT_TOKEN)
+    return bool(_token())
 
 
 def _api_url(method: str) -> str:
-    return f"https://api.telegram.org/bot{settings.TELEGRAM_BOT_TOKEN}/{method}"
+    return f"https://api.telegram.org/bot{_token()}/{method}"
 
 
 def send_message(chat_id: int | str, text: str) -> dict | None:
     if not configured():
-        log.warning("Telegram не настроен — пусто TELEGRAM_BOT_TOKEN")
+        log.warning("Telegram не настроен — токен бота не задан в настройках")
         return None
     try:
         r = httpx.post(

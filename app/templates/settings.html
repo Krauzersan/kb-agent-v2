@@ -46,6 +46,8 @@
   <button type="button" data-p="search">Поиск</button>
   <button type="button" data-p="pachca">Пачка</button>
   <button type="button" data-p="omni">Omnidesk</button>
+  <button type="button" data-p="telegram">Telegram</button>
+  <button type="button" data-p="whatsapp">WhatsApp</button>
 </div>
 
 <form method="post" action="/admin/settings" id="setform">
@@ -413,6 +415,52 @@
         <span class="lbl">Отвечать внутренней заметкой
           <small>Сотрудник проверит ответ перед отправкой клиенту.</small></span>
       </label>
+    </div>
+  </div>
+
+  <!-- ---------- Telegram ---------- -->
+  <div class="pane" data-p="telegram">
+    <div class="card">
+      <h2>Telegram</h2>
+      <p class="desc">Бот отвечает на сообщения в Telegram. Базовый уровень: только текст, без
+        проверки подписи вебхука — подробнее в README проекта.</p>
+      <div class="field">
+        <label>Токен бота (от @BotFather)
+          {% if s.telegram_bot_token__is_set %}<span class="badge ok">сохранён</span>{% else %}<span class="badge err">не задан</span>{% endif %}
+        </label>
+        <input type="password" name="telegram_bot_token" placeholder="123456:ABC-DEF... (пусто = оставить как есть)">
+      </div>
+      <p class="hint">После сохранения токена укажите Telegram адрес вебхука (один раз, из терминала):<br>
+        <code>curl "https://api.telegram.org/bot&lt;ТОКЕН&gt;/setWebhook?url=https://ваш-домен/webhook/telegram"</code>
+      </p>
+    </div>
+  </div>
+
+  <!-- ---------- WhatsApp ---------- -->
+  <div class="pane" data-p="whatsapp">
+    <div class="card">
+      <h2>WhatsApp</h2>
+      <p class="desc">Официальный WhatsApp Cloud API (Meta Business Platform). Базовый уровень:
+        только текст, без проверки подписи вебхука — подробнее в README проекта.</p>
+      <div class="field">
+        <label>Access-токен (из Meta for Developers)
+          {% if s.whatsapp_access_token__is_set %}<span class="badge ok">сохранён</span>{% else %}<span class="badge err">не задан</span>{% endif %}
+        </label>
+        <input type="password" name="whatsapp_access_token" placeholder="постоянный токен (пусто = оставить как есть)">
+      </div>
+      <div class="field">
+        <label>Phone Number ID</label>
+        <input type="text" name="whatsapp_phone_number_id" value="{{ s.whatsapp_phone_number_id }}" placeholder="из того же кабинета Meta">
+      </div>
+      <div class="field">
+        <label>Verify-токен для вебхука
+          {% if s.whatsapp_verify_token__is_set %}<span class="badge ok">сохранён</span>{% else %}<span class="badge err">не задан</span>{% endif %}
+        </label>
+        <input type="password" name="whatsapp_verify_token" placeholder="придумайте строку (пусто = оставить как есть)">
+      </div>
+      <p class="hint">В кабинете Meta (WhatsApp → Configuration) укажите адрес вебхука
+        <code>https://ваш-домен/webhook/whatsapp</code>, тот же verify-токен, и подпишитесь на
+        событие <b>messages</b>.</p>
     </div>
   </div>
 

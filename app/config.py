@@ -39,16 +39,6 @@ class Settings:
     # без шифрования (совместимость со старыми деплоями без этой переменной).
     ENCRYPTION_KEY: str = os.getenv("ENCRYPTION_KEY", "")
 
-    # Каналы обмена сообщениями (Telegram, WhatsApp) — базовая интеграция, поэтому
-    # токены пока читаются из .env, а не из settings_store/админки (см. Пачку/Omnidesk
-    # для примера, как завести туда же, если понадобится UI).
-    TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "")
-
-    WHATSAPP_ACCESS_TOKEN: str = os.getenv("WHATSAPP_ACCESS_TOKEN", "")
-    WHATSAPP_PHONE_NUMBER_ID: str = os.getenv("WHATSAPP_PHONE_NUMBER_ID", "")
-    # Придумываете сами — Meta присылает его же обратно при подтверждении вебхука (GET).
-    WHATSAPP_VERIFY_TOKEN: str = os.getenv("WHATSAPP_VERIFY_TOKEN", "")
-
     @property
     def DATA_DIR_ABS(self) -> str:
         return os.path.abspath(self.DATA_DIR)
