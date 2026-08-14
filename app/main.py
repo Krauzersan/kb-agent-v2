@@ -15,7 +15,9 @@ import convo
 import db
 import omnidesk_webhook
 import settings_store
+import telegram_webhook
 import webhook
+import whatsapp_webhook
 from config import settings
 
 logging.basicConfig(level=logging.INFO,
@@ -31,6 +33,8 @@ app.add_middleware(SessionMiddleware, secret_key=settings.SESSION_SECRET,
 app.include_router(admin.router)
 app.include_router(webhook.router)
 app.include_router(omnidesk_webhook.router)
+app.include_router(telegram_webhook.router)
+app.include_router(whatsapp_webhook.router)
 
 # Картинки из ZIP-импорта — раздаём статикой по прямой ссылке (нужно мессенджерам,
 # чтобы вставлять картинку в ответ). Только эта папка публична, не весь KB_DIR.
