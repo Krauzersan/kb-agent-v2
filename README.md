@@ -1,5 +1,5 @@
 <h1 align="center">KB Agent</h1>
-<p align="center"><em>Turn a pile of documents into a support agent that actually knows your business.</em></p>
+<p align="center"><em>Dump your docs in, get a bot that actually knows what it's talking about.</em></p>
 
 <p align="center">
   <img alt="Python" src="https://img.shields.io/badge/python-3.11-3776AB?logo=python&logoColor=white">
@@ -16,53 +16,53 @@
 <a id="english"></a>
 ## English
 
-> I built this after one too many afternoons watching support agents give three different answers to the same question — not because anyone was careless, but because the real answer was buried in some PDF nobody had opened since it was written. KB Agent is the fix I wanted for myself: point it at your documents, and it turns into something you can actually *ask*, instead of a folder you have to *search*.
+> Honestly? I got tired of watching support give three different answers to the same question — not because anyone was lazy, just because the *right* answer was sitting in some PDF nobody had opened in months. So I built the thing I actually wanted: feed it your docs, and instead of a folder you have to dig through, you get something you can just... ask.
 
-### Who it's for
+### Who's this for
 
-You don't need to be a company to get value out of this — it scales down just as well as it scales up.
+Short answer: you don't need to be a "company" for this to be useful.
 
-- **Small and medium businesses** that want consistent, correct support answers around the clock, without hiring someone whose whole job is babysitting a FAQ doc.
-- **Freelancers, consultants, and solo founders** who'd rather a client get an instant, accurate answer than wait until Monday for you to check your notes.
-- **Anyone automating their own corner of life** — a course you teach, a community you run, a side project's documentation, a family business where half the "process" lives in one person's head and nowhere else.
+- **Small and medium businesses** — give people the same correct answer at 3pm and at 3am, without paying someone to babysit a FAQ page all day.
+- **Freelancers, consultants, solo founders** — your client gets an answer right now instead of waiting for you to dig through your notes on Monday.
+- **Regular people automating their own stuff** — a course you teach, a community you run, docs for a side project, a family business where the "process" mostly just lives in someone's head.
 
-If you can gather what you know into files, this will turn it into something people can talk to — through a chat window, or straight from Telegram, WhatsApp, or wherever your people already are.
+Basically: if you can dump what you know into a bunch of files, this turns it into something people can actually talk to — in a chat window, or straight from Telegram, WhatsApp, wherever your people already hang out.
 
-It's a single FastAPI service, one admin panel — no cluster of microservices to babysit, no separate vector database to run.
+One FastAPI service, one admin panel. No zoo of microservices, no extra database to babysit.
 
 ### What it does
 
-**Knowledge base**
-- Upload PDFs, Word/Excel files, YAML, plain text, or images — scanned documents and photos of whiteboards get OCR'd automatically (Russian + English).
-- Add content straight from a URL, or paste raw text if you don't have a file for it.
-- Edit, replace, delete, bulk-select, and mark individual files as higher priority so the agent leans on them more.
-- Two search modes: a fast "catalog" pass over auto-generated summaries, or a slower full read-through of every matching document when you need it to be thorough.
-- Full or partial reindexing (embeddings only, catalog summaries, full-text search) when you change how the pipeline works, without re-uploading anything.
-- A test console right in the admin panel to see exactly what the agent would answer before it goes anywhere near a customer.
+**Knowledge base** — the boring-but-important part
+- Upload PDFs, Word/Excel files, YAML, plain text, or images. Scans and photos of whiteboards get OCR'd automatically (Russian + English), so yes, that phone photo of the whiteboard counts too.
+- No file handy? Just paste a URL or drop in raw text.
+- Edit, replace, delete, bulk-select, and bump priority on the files that matter most, so the agent leans on those first.
+- Two ways to search: a quick pass over auto-generated summaries, or a slow, thorough read-through of everything when "good enough" isn't good enough.
+- Reindex all or part of it (embeddings, summaries, search index) whenever you tweak something — no need to re-upload a thing.
+- There's a test console right in the panel, so you can grill the agent yourself before a real customer does.
 
-**AI providers** — pick one, switch anytime from the settings tab, no redeploy:
+**Brains** — pick a provider, switch whenever you feel like it, no redeploy needed:
 - Anthropic Claude
 - OpenAI (GPT)
 - DeepSeek
-- GigaChat (Sber) — including its OAuth token dance and the Russian trusted root CA it needs for TLS
+- GigaChat (Sber) — OAuth dance and Russian root CA included, so you don't have to fight with that yourself
 
-**Talks to your support tools**
-- **Pachca** — receives questions via webhook (with signature verification and an optional IP allowlist), replies as the bot.
-- **Omnidesk** — same idea over their webhook + HTTP Basic API, so it can pick up tickets and reply inline.
-- **Telegram** — a regular Bot API webhook. Anyone who messages the bot gets answered from the knowledge base.
-- **WhatsApp** — official WhatsApp Cloud API (Meta Business Platform), same idea: webhook in, an answer back out.
+**Where it can chat**
+- **Pachca** — webhook in, signature checked, replies as the bot.
+- **Omnidesk** — same deal via their webhook + HTTP Basic API, picks up tickets and replies inline.
+- **Telegram** — a plain Bot API webhook. Message the bot, get an answer from the knowledge base.
+- **WhatsApp** — the official Cloud API (Meta Business Platform). Same idea: message in, answer out.
 
-Telegram and WhatsApp are wired in at a basic level for now — plain text in, plain text out, configured via `.env` rather than the admin panel (see [Connecting messaging channels](#connecting-messaging-channels)). Pachca and Omnidesk are the two that have the full admin-panel treatment (tokens, thread context, ratings, etc.); Telegram/WhatsApp will get the same if it turns out to be worth it.
+Quick honesty check: Telegram and WhatsApp are the new kids here, so they're a bit more basic — plain text only, tokens live in `.env` instead of the admin panel (see [Connecting messaging channels](#connecting-messaging-channels)). Pachca and Omnidesk have had more time in the oven — full settings-panel treatment, thread memory, ratings, the works. Telegram/WhatsApp will get there too if it turns out people actually want that.
 
-**Runs itself**
-- Password-protected admin panel with its own session handling — no shared login with anything else.
-- API keys and integration tokens live encrypted in the app's own settings store, not in a config file sitting on disk in plain text.
-- Built-in analytics: what people are actually asking about, clustered by topic, plus per-user activity if you need to dig into one conversation.
-- Log viewer, disk usage and cleanup tools, and a "wipe everything" switch for when a test environment needs to start clean.
+**Doesn't need much babysitting**
+- Password-protected admin panel with its own session — doesn't piggyback on any other login.
+- Keys and tokens are stored encrypted in the app's own settings store, not sitting around in a config file in plain text.
+- Built-in analytics — what people are actually asking, grouped by topic, plus a per-user view if you need to dig into one weird conversation.
+- Logs, disk usage, cleanup tools, and a "just wipe everything" switch for when a test environment needs a fresh start.
 
 ### Under the hood
 
-FastAPI + Jinja2 templates for the admin UI, an embedded Qdrant instance for vector search (no separate server to run — it's just files on disk), multilingual `e5` sentence embeddings, SQLite for metadata and full-text search, and Tesseract for OCR.
+FastAPI, an embedded Qdrant for vector search (no extra server — just files on disk), multilingual `e5` embeddings, SQLite for metadata and full-text search, Tesseract for OCR. Nothing exotic, just parts chosen so you don't need a DevOps team to run this thing.
 
 ### Quick start (Docker)
 
@@ -168,53 +168,53 @@ This is meant to run on a server you control, behind HTTPS. Set a real `ADMIN_PA
 <a id="русский"></a>
 ## Русский
 
-> Я сделал этого агента после того, как в очередной раз посмотрел, как саппорт даёт три разных ответа на один и тот же вопрос — не потому что кто-то халтурил, а потому что правильный ответ лежал в каком-то PDF-е, который никто не открывал с момента, как его написали. KB Agent — это то, чего мне самому не хватало: скармливаешь ему документы, и вместо папки, которую нужно *перерывать*, получаешь то, у чего можно просто *спросить*.
+> Если честно — я просто устал смотреть, как саппорт даёт три разных ответа на один и тот же вопрос. И дело не в том, что кто-то ленился — правильный ответ реально лежал в каком-то PDF-е, который никто не открывал с момента, как его написали. Вот и сделал то, чего самому не хватало: скармливаешь агенту документы, и вместо папки, которую надо *перерывать*, получаешь то, у чего можно просто... взять и спросить.
 
 ### Кому это пригодится
 
-Чтобы получить пользу от этого агента, не обязательно быть компанией — он одинаково хорошо работает и в большом, и в малом масштабе.
+Если коротко — «компанией» быть не обязательно, чтобы от этого была польза.
 
-- **Малому и среднему бизнесу**, который хочет давать клиентам стабильные и правильные ответы круглосуточно, не нанимая отдельного человека, чья единственная работа — следить за актуальностью FAQ.
-- **Фрилансерам, консультантам и соло-основателям**, которым важнее, чтобы клиент получил точный ответ сразу, а не ждал до понедельника, пока вы найдёте время заглянуть в свои заметки.
-- **Всем, кто автоматизирует свой личный кусочек жизни** — курс, который вы ведёте, сообщество, которым управляете, документацию к пет-проекту, семейный бизнес, где половина «процессов» живёт исключительно в голове одного человека и больше нигде.
+- **Малому и среднему бизнесу** — чтобы клиент получал один и тот же правильный ответ что в три дня, что в три ночи, и не пришлось нанимать человека, единственная работа которого — следить, чтобы FAQ не устарел.
+- **Фрилансерам, консультантам, соло-основателям** — клиент получает ответ прямо сейчас, а не ждёт до понедельника, пока вы доберётесь до своих заметок.
+- **Обычным людям, которые автоматизируют свой кусок жизни** — курс, который ведёте, сообщество, которым рулите, документация к пет-проекту, семейный бизнес, где весь «процесс» на самом деле живёт в голове одного человека и больше нигде.
 
-Если вы можете собрать то, что знаете, в файлы — агент превратит это в то, с чем можно поговорить: через чат в админке или прямо из Telegram, WhatsApp и других мест, где уже находятся ваши люди.
+По сути: если вы можете собрать то, что знаете, в файлы — агент превратит это в то, с чем реально можно поговорить. В чате админки, или прямо из Telegram, WhatsApp — там, где уже сидят ваши люди.
 
-Это один FastAPI-сервис с одной админкой — не нужно поднимать и следить за зоопарком отдельных сервисов или отдельной векторной базой.
+Один FastAPI-сервис, одна админка. Никакого зоопарка микросервисов, никакой отдельной базы, за которой нужно следить.
 
 ### Что умеет
 
-**База знаний**
-- Загрузка PDF, Word/Excel, YAML, обычного текста и изображений — сканы и фото досок распознаются автоматически через OCR (русский + английский).
-- Добавление контента прямо по ссылке или вставкой текста, если файла как такового нет.
-- Редактирование, замена, удаление, массовые операции, и приоритет для отдельных файлов, чтобы агент опирался на них сильнее.
-- Два режима поиска: быстрый — по автоматически собранным кратким описаниям файлов, и медленный — полное прочтение всех подходящих документов, когда нужна максимальная точность.
-- Полная или частичная переиндексация (только эмбеддинги, только каталог, только полнотекстовый поиск) при изменении логики — без повторной загрузки файлов.
-- Тестовая консоль прямо в админке — можно проверить, что именно ответит агент, прежде чем это увидит клиент.
+**База знаний** — скучная, но важная часть
+- Загружайте PDF, Word/Excel, YAML, обычный текст или картинки. Сканы и фото досок распознаются сами через OCR (русский + английский) — да, то самое фото доски с телефона тоже сработает.
+- Нет файла под рукой — просто вставьте ссылку или кусок текста.
+- Редактирование, замена, удаление, массовые операции, и приоритет для важных файлов, чтобы агент в первую очередь опирался на них.
+- Два режима поиска: быстрый — по коротким автоописаниям, и медленный, дотошный — когда «примерно так» не устраивает.
+- Переиндексация целиком или частично (эмбеддинги, каталог, полнотекстовый поиск) при любых правках — без повторной загрузки файлов.
+- Тестовая консоль прямо в админке — можно самим погонять агента вопросами, прежде чем это сделает настоящий клиент.
 
-**AI-провайдеры** — выбираются и переключаются на лету, во вкладке настроек, без передеплоя:
+**Мозги** — выбираете провайдера, переключаете когда захотите, без передеплоя:
 - Anthropic Claude
 - OpenAI (GPT)
 - DeepSeek
-- GigaChat (Сбер) — с полной поддержкой их OAuth-авторизации и российского корневого сертификата, без которого не пройдёт TLS
+- GigaChat (Сбер) — с их OAuth-плясками и российским корневым сертификатом уже разобрались за вас
 
-**Интеграции с саппортом**
-- **Пачка** — принимает вопросы через вебхук (с проверкой подписи и опциональным списком разрешённых IP), отвечает от имени бота.
-- **Omnidesk** — то же самое через их вебхук и HTTP Basic API: агент подхватывает обращения и отвечает прямо в тикете.
-- **Telegram** — обычный вебхук Bot API. Кто угодно пишет боту — получает ответ из базы знаний.
-- **WhatsApp** — официальный WhatsApp Cloud API (Meta Business Platform), та же идея: вебхук на вход, ответ на выход.
+**Где может общаться**
+- **Пачка** — вебхук на вход, подпись проверяется, отвечает от имени бота.
+- **Omnidesk** — та же идея через их вебхук и HTTP Basic API: подхватывает обращения, отвечает прямо в тикете.
+- **Telegram** — обычный вебхук Bot API. Написали боту — получили ответ из базы знаний.
+- **WhatsApp** — официальный Cloud API (Meta Business Platform). Та же идея: сообщение на вход, ответ на выход.
 
-Telegram и WhatsApp пока подключены на базовом уровне: только текст, без доп. проверок подписи, настраиваются через `.env`, а не через админку (см. [«Подключение мессенджеров»](#подключение-мессенджеров)). У Пачки и Omnidesk — полноценная интеграция с настройками в админке (токены, контекст треда, оценки и т.д.); Telegram/WhatsApp дотянем до того же уровня, если понадобится.
+Честно говоря: Telegram и WhatsApp тут новенькие, поэтому чуть попроще — только текст, токены живут в `.env`, а не в админке (см. [«Подключение мессенджеров»](#подключение-мессенджеров)). У Пачки и Omnidesk опыта побольше — полноценные настройки в админке, память треда, оценки ответов, всё как надо. Telegram/WhatsApp дотянем до того же уровня, если станет понятно, что оно того стоит.
 
-**Эксплуатация**
-- Админ-панель с паролем и собственной сессией — не завязана на чужую авторизацию.
-- API-ключи и токены интеграций хранятся в зашифрованном виде в собственном хранилище настроек приложения, а не в конфиге открытым текстом.
-- Встроенная аналитика: какие вопросы реально задают, с группировкой по темам, плюс активность по конкретному пользователю, если нужно разобрать один диалог.
-- Просмотр логов, статистика по диску, очистка, и рубильник «стереть всё» для тестовых окружений.
+**Не требует особого присмотра**
+- Админ-панель с паролем и своей сессией — ни от кого чужого логина не зависит.
+- Ключи и токены хранятся зашифрованными в собственном хранилище настроек, а не валяются в конфиге открытым текстом.
+- Встроенная аналитика — что реально спрашивают, с группировкой по темам, плюс разбор по конкретному пользователю, если нужно понять один странный диалог.
+- Логи, место на диске, очистка, и кнопка «стереть всё» для тестовых окружений, которым нужен чистый старт.
 
 ### Технически
 
-FastAPI + Jinja2-шаблоны для админки, встроенный Qdrant для векторного поиска (без отдельного сервера — данные лежат файлами на диске), мультиязычные эмбеддинги `e5`, SQLite для метаданных и полнотекстового поиска, Tesseract для OCR.
+FastAPI, встроенный Qdrant для векторного поиска (без отдельного сервера — просто файлы на диске), мультиязычные эмбеддинги `e5`, SQLite для метаданных и полнотекстового поиска, Tesseract для OCR. Ничего экзотического — стек собран так, чтобы для запуска не нужна была отдельная DevOps-команда.
 
 ### Быстрый старт (Docker)
 
