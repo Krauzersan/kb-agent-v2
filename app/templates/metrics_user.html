@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}{{ asker_name }} — Метрики{% endblock %}
+{% block page_title %}{{ asker_name }}{% endblock %}
+{% block actions %}
+  <a class="btn ghost sm" href="/admin/metrics">← Ко всем сотрудникам</a>
+{% endblock %}
+
+{% block content %}
+
+<div class="grid c3" style="margin-bottom:18px">
+  <div class="stat">
+    <div class="k">Вопросов</div>
+    <div class="v">{{ questions }}</div>
+    <div class="s">в тредах Пачки</div>
+  </div>
+  <div class="stat">
+    <div class="k">Оценено</div>
+    <div class="v">{{ rated }}</div>
+    <div class="s">{% if questions %}{{ (100 * rated / questions) | round | int }}% от всех{% else %}—{% endif %}</div>
+  </div>
+  <div class="stat">
+    <div class="k">Средняя оценка</div>
+    <div class="v" style="{% if avg_rating is none %}color:var(--muted){% elif avg_rating >= 8 %}color:var(--ok){% elif avg_rating >= 5 %}color:var(--warn){% else %}color:var(--err){% endif %}">
+      {{ avg_rating if avg_rating is not none else '—' }}{% if avg_rating is not none %}<span style="font-size:14px;color:var(--faint)">/10</span>{% endif %}
+    </div>
+    <div class="s">по оценённым ответам</div>
+  </div>
+</div>
+
+{% if entries %}
+{% for e in entries %}
+<div class="card" style="margin-bottom:11px">
+  <div class="row" style="justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:8px">
+    <div class="row" style="gap:9px">
+      <span class="badge neutral">{{ e.created_at }}</span>
+      {% if e.rating is not none %}
+        <span class="badge {% if e.rating >= 8 %}ok{% elif e.rating >= 5 %}warn{% else %}err{% endif %}">оценка: {{ e.rating }}/10</span>
+      {% else %}
+        <span class="badge neutral">без оценки</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div style="margin-bottom:9px">
+    <div class="faint" style="font-size:11.6px; letter-spacing:.03em; margin-bottom:3px">ВОПРОС</div>
+    <div>{{ e.question }}</div>
+  </div>
+
+  <div style="margin-bottom:{% if e.sources %}9px{% else %}0{% endif %}">
+    <div class="faint" style="font-size:11.6px; letter-spacing:.03em; margin-bottom:3px">ОТВЕТ</div>
+    <div class="answer-collapsed">{{ e.answer }}</div>
+  </div>
+
+  {% if e.sources %}
+  <div>
+    <div class="faint" style="font-size:11.6px; letter-spacing:.03em; margin-bottom:5px">ИСТОЧНИКИ</div>
+    <div class="row" style="gap:6px; flex-wrap:wrap">
+      {% for s in e.sources %}
+        {% if s.file_id %}
+        <a class="btn ghost sm" href="/admin/file/{{ s.file_id }}{% if s.chunk_index is not none %}#chunk-{{ s.chunk_index }}{% endif %}"
+           title="score: {{ s.score }}" target="_blank" rel="noopener">
+          {% if s.priority %}★ {% endif %}{{ s.filename }}
+        </a>
+        {% else %}
+        <span class="badge neutral">{{ s.filename }}</span>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endfor %}
+{% else %}
+<div class="card"><div class="empty"><div class="ico">📊</div>
+  У этого сотрудника пока нет вопросов в тредах.
+</div></div>
+{% endif %}
+
+<style>
+  .answer-collapsed{
+    max-height:110px; overflow:hidden; white-space:pre-wrap; word-break:break-word;
+    font-size:13.5px; line-height:1.55; position:relative; cursor:pointer;
+  }
+  .answer-collapsed.expanded{ max-height:none; cursor:default }
+  .answer-collapsed:not(.expanded)::after{
+    content:'Показать полностью…'; position:absolute; bottom:0; right:0; left:0;
+    padding:20px 0 2px; text-align:right; font-size:12px; color:var(--accent-text);
+    background:linear-gradient(to bottom, transparent, var(--surface) 65%);
+  }
+</style>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.querySelectorAll('.answer-collapsed').forEach(function(el){
+    if(el.scrollHeight <= el.clientHeight + 4) return;
+    el.addEventListener('click', function(){ el.classList.add('expanded'); });
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,331 @@
+{% extends "base.html" %}
+{% block title %}База знаний MAXMA{% endblock %}
+{% block page_title %}База знаний{% endblock %}
+{% block actions %}
+  <a class="btn ghost sm" href="/admin/test">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+    Проверить агента
+  </a>
+{% endblock %}
+
+{% block content %}
+
+{% if not claude_ready %}
+<div class="alert warn">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg>
+  <div><b>Ключ ИИ-провайдера не задан.</b>
+    <span class="txt">Агент не сможет отвечать. Откройте <a href="/admin/settings">Настройки</a> и введите API-ключ.</span></div>
+</div>
+{% endif %}
+
+{% if request.query_params.get('err') == 'url' %}
+<div class="alert err"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+  <div class="txt">Некорректная ссылка — начните с http:// или https://</div></div>
+{% endif %}
+{% if request.query_params.get('err') == 'dup' %}
+<div class="alert warn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+  <div class="txt">Эта ссылка уже добавлена.</div></div>
+{% endif %}
+{% if request.query_params.get('err') == 'zip' %}
+<div class="alert err"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+  <div class="txt">Нужен файл с расширением .zip.</div></div>
+{% endif %}
+{% if request.query_params.get('err') == 'text' %}
+<div class="alert err"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+  <div class="txt">Заполните и заголовок, и текст.</div></div>
+{% endif %}
+{% if request.query_params.get('deleted') %}
+<div class="alert ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6L9 17l-5-5"/></svg>
+  <div class="txt">Удаление запущено: файлов — {{ request.query_params.get('deleted') }}.</div></div>
+{% endif %}
+
+<div class="grid c4" style="margin-bottom:18px">
+  <div class="stat">
+    <div class="k">Всего файлов</div>
+    <div class="v">{{ files|length }}</div>
+    <div class="s">в базе знаний</div>
+  </div>
+  <div class="stat">
+    <div class="k">Проиндексировано</div>
+    <div class="v" style="color:var(--ok)">{{ files_ready|length }}</div>
+    <div class="s">готовы к поиску</div>
+  </div>
+  <div class="stat">
+    <div class="k">Фрагментов</div>
+    <div class="v">{{ '{:,}'.format(total_chunks).replace(',', ' ') }}</div>
+    <div class="s">кусков текста в индексе</div>
+  </div>
+  <div class="stat">
+    <div class="k">Требуют внимания</div>
+    <div class="v" style="{% if files_pending %}color:var(--warn){% else %}color:var(--muted){% endif %}">{{ files_pending|length }}</div>
+    <div class="s">не проиндексированы</div>
+  </div>
+</div>
+
+<div class="grid c3" style="margin-bottom:16px">
+  <div class="card" style="margin:0">
+    <h2>Загрузить файлы</h2>
+    <p class="desc">Перетащите файлы сюда или выберите вручную. Можно сразу несколько, включая ZIP-архивы.</p>
+    <form id="upform" method="post" action="/admin/upload" enctype="multipart/form-data">
+      <div id="drop" style="border:1.5px dashed var(--line-2); border-radius:var(--r); padding:26px 16px;
+           text-align:center; cursor:pointer; transition:.15s; background:var(--surface-2)">
+        <div style="font-size:26px; opacity:.55; line-height:1">📥</div>
+        <div style="font-weight:560; margin-top:7px" id="dropmain">Перетащите файлы или нажмите</div>
+        <div class="faint" style="margin-top:4px">docx, pdf, md, txt, csv, yml, json, xlsx, картинки (OCR), zip-архивы (Slite и т.п.)</div>
+      </div>
+      <input type="file" id="fileinput" name="files" multiple style="display:none">
+      <div id="uplist" class="faint" style="margin-top:10px; display:none"></div>
+      <button type="submit" id="upbtn" style="margin-top:12px; display:none">Загрузить и проиндексировать</button>
+      <span class="hint">ZIP распознаётся автоматически: папки с markdown и картинками распаковываются, ссылки на картинки
+        (<code>![alt](images/pic.png)</code>) превращаются в настоящие ссылки, которые агент сможет показать в ответе.
+        Большой архив индексируется в фоне — прогресс на странице «Обслуживание».</span>
+    </form>
+  </div>
+
+  <div class="card" style="margin:0">
+    <h2>Добавить по ссылке</h2>
+    <p class="desc">Агент скачает страницу, извлечёт текст и картинки, проиндексирует.</p>
+    <form method="post" action="/admin/add_url">
+      <div class="field">
+        <input type="url" name="url" placeholder="https://docs.example.com/страница" required>
+      </div>
+      <button type="submit">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/></svg>
+        Загрузить страницу
+      </button>
+      <span class="hint">Подходит для обычной документации (не полностью JS-рендеримой).</span>
+    </form>
+  </div>
+
+  <div class="card" style="margin:0">
+    <h2>Добавить текст напрямую</h2>
+    <p class="desc">Без файла — впишите заголовок и текст, агент проиндексирует как обычную статью.</p>
+    <form method="post" action="/admin/add_text">
+      <div class="field">
+        <input type="text" name="title" placeholder="Заголовок статьи" required>
+      </div>
+      <div class="field">
+        <textarea name="text" rows="4" placeholder="Текст статьи…" required
+                  style="width:100%; resize:vertical; font:inherit; padding:10px 12px;
+                  border:1px solid var(--line-2); border-radius:var(--r); background:var(--surface-2);
+                  color:inherit"></textarea>
+      </div>
+      <button type="submit">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
+        Добавить и проиндексировать
+      </button>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <div class="row" style="justify-content:space-between; margin-bottom:14px">
+    <h2>Файлы</h2>
+    <span class="faint" id="filecount"></span>
+  </div>
+
+  <div class="row" style="gap:9px; margin-bottom:14px">
+    <div style="flex:1; min-width:190px; position:relative">
+      <input type="search" id="q" placeholder="Поиск по названию…" style="padding-left:33px" oninput="kbRender()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           style="width:15px;height:15px;position:absolute;left:11px;top:11px;color:var(--faint)"><circle cx="11" cy="11" r="7"/><path d="M21 21l-3.5-3.5"/></svg>
+    </div>
+    <div class="seg" id="statusSeg">
+      <button type="button" class="active" data-v="all">Все</button>
+      <button type="button" data-v="ready">Готовы</button>
+      <button type="button" data-v="problem">Проблемные</button>
+      <button type="button" data-v="star">★ Приоритет</button>
+    </div>
+    <select id="sort" onchange="kbRender()" style="width:auto; min-width:150px">
+      <option value="date">Сначала новые</option>
+      <option value="date_asc">Сначала старые</option>
+      <option value="name">По названию А→Я</option>
+      <option value="chunks">Больше фрагментов</option>
+      <option value="size">Больше размер</option>
+    </select>
+  </div>
+
+  <div id="bulkbar" class="row" style="display:none; gap:9px; padding:10px 13px; margin-bottom:12px;
+       background:var(--accent-weak); border-radius:var(--r-sm)">
+    <b id="selcount" style="font-size:13px"></b>
+    <div style="flex:1"></div>
+    <button type="button" class="ghost sm" onclick="kbBulk('/admin/priority?value=1')">★ В приоритет</button>
+    <button type="button" class="ghost sm" onclick="kbBulk('/admin/priority?value=0')">Снять ★</button>
+    <button type="button" class="danger sm" onclick="if(confirm('Удалить выбранные файлы из базы знаний?')) kbBulk('/admin/delete_selected')">Удалить</button>
+    <button type="button" class="icon-btn sm" onclick="kbClearSel()" title="Снять выделение" aria-label="Снять выделение">✕</button>
+  </div>
+
+  <div class="table-wrap">
+    <table id="kbtable">
+      <thead>
+        <tr>
+          <th style="width:34px"><input type="checkbox" id="checkall" onclick="kbToggleAll(this.checked)" style="width:auto; cursor:pointer"></th>
+          <th>Файл</th>
+          <th style="width:110px">Статус</th>
+          <th style="width:95px; text-align:right">Фрагментов</th>
+          <th style="width:95px; text-align:right">Размер</th>
+          <th style="width:105px">Загружен</th>
+          <th style="width:150px"></th>
+        </tr>
+      </thead>
+      <tbody id="kbbody"></tbody>
+    </table>
+  </div>
+
+  <div class="row" id="pager" style="justify-content:center; margin-top:14px; gap:6px"></div>
+  <p class="hint" style="margin-top:12px">★ приоритетные — бот ищет по ним в первую очередь; если там нерелевантно, подмешивает остальные.</p>
+</div>
+
+<form id="bulkform" method="post" style="display:none"></form>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  var FILES = {{ files_json|tojson }};
+  var PAGE = 1, PER = 25, STATUS = 'all', SEL = {};
+
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g, function(m){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]; }); }
+
+  function kbFiltered(){
+    var q = (document.getElementById('q').value||'').trim().toLowerCase();
+    var list = FILES.filter(function(f){
+      if(q && f.name.toLowerCase().indexOf(q) < 0) return false;
+      if(STATUS === 'ready' && f.status !== 'ready') return false;
+      if(STATUS === 'problem' && f.status === 'ready') return false;
+      if(STATUS === 'star' && !f.priority) return false;
+      return true;
+    });
+    var s = document.getElementById('sort').value;
+    list.sort(function(a,b){
+      if(s === 'name') return a.name.localeCompare(b.name, 'ru');
+      if(s === 'chunks') return b.chunks - a.chunks;
+      if(s === 'size') return b.size - a.size;
+      if(s === 'date_asc') return (a.created||'').localeCompare(b.created||'');
+      return (b.created||'').localeCompare(a.created||'');
+    });
+    return list;
+  }
+
+  function kbRender(){
+    var list = kbFiltered();
+    var pages = Math.max(1, Math.ceil(list.length / PER));
+    if(PAGE > pages) PAGE = pages;
+    var slice = list.slice((PAGE-1)*PER, PAGE*PER);
+
+    document.getElementById('filecount').textContent =
+      list.length ? ('показано ' + slice.length + ' из ' + list.length) : '';
+
+    var html = '';
+    slice.forEach(function(f){
+      var badge = f.status === 'ready'
+        ? '<span class="badge ok"><span class="dot"></span>готов</span>'
+        : (f.status === 'error'
+            ? '<span class="badge err" title="' + esc(f.error) + '">ошибка</span>'
+            : '<span class="badge warn"><span class="spin">◌</span> ' + esc(f.status) + '</span>');
+      html += '<tr data-id="' + f.id + '"' + (SEL[f.id] ? ' style="background:var(--accent-weak)"' : '') + '>'
+        + '<td><input type="checkbox" class="kbcheck" value="' + f.id + '"' + (SEL[f.id]?' checked':'')
+          + ' onclick="kbSel(' + f.id + ', this.checked)" style="width:auto;cursor:pointer"></td>'
+        + '<td>' + (f.priority ? '<span title="Приоритетный" style="color:var(--star)">★</span> ' : '')
+          + '<a href="/admin/file/' + f.id + '">' + esc(f.name) + '</a>'
+          + (f.status === 'error' && f.error ? '<div class="faint" style="color:var(--err);font-size:11.6px;margin-top:2px">' + esc(f.error) + '</div>' : '')
+          + '</td>'
+        + '<td>' + badge + '</td>'
+        + '<td style="text-align:right;font-variant-numeric:tabular-nums">' + (f.chunks || '—') + '</td>'
+        + '<td style="text-align:right;font-variant-numeric:tabular-nums" class="faint">' + kbBytes(f.size) + '</td>'
+        + '<td class="faint">' + esc(f.created || '') + '</td>'
+        + '<td style="text-align:right;white-space:nowrap">'
+          + '<a class="btn ghost sm" href="/admin/file/' + f.id + '">Открыть</a> '
+          + '<a class="icon-btn sm" title="Редактировать" aria-label="Редактировать файл" href="/admin/file/' + f.id + '/edit">✎</a>'
+          + '<button type="button" class="icon-btn sm" title="Переиндексировать" aria-label="Переиндексировать файл" onclick="kbPost(\'/admin/reindex/' + f.id + '\')">↻</button>'
+          + '<button type="button" class="icon-btn sm" title="Удалить" aria-label="Удалить файл" style="color:var(--err)"'
+          + ' onclick="if(confirm(\'Удалить файл?\')) kbPost(\'/admin/delete/' + f.id + '\')">✕</button>'
+        + '</td></tr>';
+    });
+
+    document.getElementById('kbbody').innerHTML = html ||
+      '<tr><td colspan="7"><div class="empty"><div class="ico">🗂</div>Ничего не найдено</div></td></tr>';
+
+    // пагинация
+    var p = '';
+    if(pages > 1){
+      p += '<button type="button" class="ghost sm"' + (PAGE<=1?' disabled':'') + ' onclick="kbPage(' + (PAGE-1) + ')">←</button>';
+      p += '<span class="faint" style="padding:0 10px">стр. ' + PAGE + ' из ' + pages + '</span>';
+      p += '<button type="button" class="ghost sm"' + (PAGE>=pages?' disabled':'') + ' onclick="kbPage(' + (PAGE+1) + ')">→</button>';
+    }
+    document.getElementById('pager').innerHTML = p;
+    kbSelBar();
+  }
+
+  function kbPage(n){ PAGE = n; kbRender(); window.scrollTo({top:0, behavior:'smooth'}); }
+  function kbSel(id, on){ if(on) SEL[id] = true; else delete SEL[id]; kbRender(); }
+  function kbClearSel(){ SEL = {}; document.getElementById('checkall').checked = false; kbRender(); }
+  function kbToggleAll(on){
+    kbFiltered().slice((PAGE-1)*PER, PAGE*PER).forEach(function(f){
+      if(on) SEL[f.id] = true; else delete SEL[f.id];
+    });
+    kbRender();
+  }
+  function kbSelBar(){
+    var n = Object.keys(SEL).length;
+    document.getElementById('bulkbar').style.display = n ? '' : 'none';
+    document.getElementById('selcount').textContent = 'Выбрано: ' + n;
+  }
+  function kbBulk(action){
+    var ids = Object.keys(SEL);
+    if(!ids.length) return;
+    var f = document.getElementById('bulkform');
+    f.action = action; f.innerHTML = '';
+    ids.forEach(function(id){
+      var i = document.createElement('input');
+      i.type = 'hidden'; i.name = 'ids'; i.value = id; f.appendChild(i);
+    });
+    f.submit();
+  }
+  function kbPost(url){
+    var f = document.createElement('form');
+    f.method = 'post'; f.action = url;
+    document.body.appendChild(f); f.submit();
+  }
+
+  document.querySelectorAll('#statusSeg button').forEach(function(b){
+    b.addEventListener('click', function(){
+      document.querySelectorAll('#statusSeg button').forEach(function(x){ x.classList.toggle('active', x === b); });
+      STATUS = b.dataset.v; PAGE = 1; kbRender();
+    });
+  });
+
+  // Загрузка: drag-and-drop + выбор файлов
+  (function(){
+    var drop = document.getElementById('drop'), inp = document.getElementById('fileinput'),
+        list = document.getElementById('uplist'), btn = document.getElementById('upbtn');
+    if(!drop) return;
+    function show(){
+      var n = inp.files.length;
+      if(!n){ list.style.display = 'none'; btn.style.display = 'none'; return; }
+      var names = [].slice.call(inp.files).slice(0, 6).map(function(f){ return f.name; });
+      list.innerHTML = 'Выбрано файлов: <b>' + n + '</b><br>' + esc(names.join(', ')) + (n > 6 ? ' и ещё ' + (n-6) : '');
+      list.style.display = ''; btn.style.display = '';
+    }
+    drop.addEventListener('click', function(){ inp.click(); });
+    inp.addEventListener('change', show);
+    ['dragenter','dragover'].forEach(function(ev){
+      drop.addEventListener(ev, function(e){ e.preventDefault();
+        drop.style.borderColor = 'var(--accent)'; drop.style.background = 'var(--accent-weak)'; });
+    });
+    ['dragleave','drop'].forEach(function(ev){
+      drop.addEventListener(ev, function(e){ e.preventDefault();
+        drop.style.borderColor = 'var(--line-2)'; drop.style.background = 'var(--surface-2)'; });
+    });
+    drop.addEventListener('drop', function(e){
+      if(e.dataTransfer && e.dataTransfer.files.length){ inp.files = e.dataTransfer.files; show(); }
+    });
+    document.getElementById('upform').addEventListener('submit', function(){
+      btn.disabled = true; btn.textContent = 'Загружаю…';
+    });
+  })();
+
+  kbRender();
+</script>
+{% endblock %}

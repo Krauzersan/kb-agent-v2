@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% block title %}Обслуживание — база знаний{% endblock %}
+{% block page_title %}Обслуживание{% endblock %}
+
+{% block content %}
+
+{% if request.query_params.get('cleaned') %}
+<div class="alert ok">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6L9 17l-5-5"/></svg>
+  <div class="txt"><b>Очистка выполнена.</b>
+    Лишних файлов удалено: {{ request.query_params.get('cleaned') }} ·
+    записей памяти тредов: {{ request.query_params.get('threads') }} ·
+    освобождено ≈{{ ((request.query_params.get('freed') or 0)|int / 1048576) | round(1) }} МБ.</div>
+</div>
+{% endif %}
+{% if request.query_params.get('bulk') %}
+<div class="alert ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6L9 17l-5-5"/></svg>
+  <div class="txt">Массовая загрузка запущена — прогресс виден вверху страницы.</div></div>
+{% endif %}
+{% if request.query_params.get('zip') %}
+<div class="alert ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6L9 17l-5-5"/></svg>
+  <div class="txt">Импорт ZIP-архива запущен — распаковка и индексация идут в фоне, прогресс виден вверху страницы.</div></div>
+{% endif %}
+{% if request.query_params.get('reindex') %}
+<div class="alert ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6L9 17l-5-5"/></svg>
+  <div class="txt">Переиндексация запущена — прогресс виден вверху страницы.</div></div>
+{% endif %}
+{% if request.query_params.get('catalog') %}
+<div class="alert ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6L9 17l-5-5"/></svg>
+  <div class="txt">Построение каталога запущено — прогресс виден вверху страницы.</div></div>
+{% endif %}
+{% if request.query_params.get('fts') == 'started' %}
+<div class="alert ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6L9 17l-5-5"/></svg>
+  <div class="txt">Построение лексического индекса запущено — прогресс виден вверху страницы.</div></div>
+{% endif %}
+{% if request.query_params.get('wiped') %}
+<div class="alert ok"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6L9 17l-5-5"/></svg>
+  <div class="txt">База знаний полностью очищена — удалено записей: {{ request.query_params.get('wiped') }}.
+    Файлы, картинки и индекс удалены. Можно загружать заново.</div></div>
+{% endif %}
+{% if request.query_params.get('err') == 'confirm' %}
+<div class="alert err"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+  <div class="txt">Подтверждение не совпало — введите текст в точности как указано. Ничего не удалено.</div></div>
+{% endif %}
+
+<div class="card">
+  <h2>Каталог базы знаний</h2>
+  <p class="desc">Краткое summary каждого файла — используется, чтобы отвечать на вопросы вида
+    «перечисли все X», ответ на которые размазан по многим файлам (обычный поиск для них не
+    годится: он возвращает всего несколько кусков текста, а не весь список файлов).
+    Строится автоматически при загрузке нового файла; кнопка ниже — разово досчитать
+    каталог для уже загруженных файлов.</p>
+  <p class="desc"><b>{{ catalog.with_summary }} из {{ catalog.total }}</b> файлов уже в каталоге.</p>
+  <form method="post" action="/admin/backfill_summaries">
+    <button class="ghost" type="submit" {{ 'disabled' if catalog.with_summary == catalog.total else '' }}>
+      📚 Построить каталог для остальных файлов ({{ catalog.total - catalog.with_summary }})
+    </button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Лексический индекс (гибридный поиск)</h2>
+  <p class="desc">Точные совпадения (код ошибки, версия, название кассы) дополняют смысловой
+    поиск — помогает, когда эмбеддинг ранжирует нужный кусок ниже похожих по смыслу.
+    Строится автоматически при загрузке нового файла; кнопка ниже — разово досчитать
+    для уже загруженных файлов.</p>
+  <p class="desc"><b>{{ fts.indexed }} из {{ fts.total }}</b> файлов уже в лексическом индексе.</p>
+  <form method="post" action="/admin/backfill_fts">
+    <button class="ghost" type="submit" {{ 'disabled' if fts.indexed == fts.total else '' }}>
+      🔎 Построить лексический индекс для остальных файлов ({{ fts.total - fts.indexed }})
+    </button>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Место на диске</h2>
+  <p class="desc">Сколько занимают база, файлы и поисковый индекс.</p>
+  <div id="diskinfo" class="muted">загружаю…</div>
+</div>
+
+<div class="grid c2">
+  <div class="card">
+    <h2>Очистка</h2>
+    <p class="desc">Удаляет файлы, на которые нет записей в базе, память диалогов старше 30 дней,
+      и сжимает БД. Проиндексированные файлы, настройки и ключи не трогает.</p>
+    <form method="post" action="/admin/cleanup"
+          onsubmit="return confirm('Удалить осиротевшие файлы, память тредов старше 30 дней и сжать базу?');">
+      <button class="ghost" type="submit">🧹 Очистить мусор и сжать базу</button>
+    </form>
+  </div>
+
+  <div class="card">
+    <h2>Переиндексация</h2>
+    <p class="desc">Пересобирает поисковый индекс из уже загруженных файлов.
+      Нужна после смены модели эмбеддингов или сбоя индекса.</p>
+    <form method="post" action="/admin/reindex_all"
+          onsubmit="return confirm('Переиндексировать все файлы заново? Это может занять время.');">
+      <button class="ghost" type="submit">↻ Переиндексировать всё</button>
+    </form>
+  </div>
+</div>
+
+<div class="card">
+  <h2>Массовая загрузка из папки на сервере</h2>
+  <p class="desc">Рекурсивно загружает поддерживаемые файлы из папки на сервере. Уже загруженные пропускаются.</p>
+  <form method="post" action="/admin/bulk">
+    <div class="row" style="align-items:flex-end; gap:12px">
+      <div style="flex:2; min-width:220px">
+        <label>Путь к папке на сервере</label>
+        <input type="text" name="path" placeholder="/opt/kb_source" required>
+      </div>
+      <div style="flex:1; min-width:170px">
+        <label>Расширения</label>
+        <input type="text" name="extensions" value="md,txt,docx,yml,yaml">
+      </div>
+      <button type="submit">Загрузить</button>
+    </div>
+  </form>
+</div>
+
+<div class="card" style="border:1px solid var(--err)">
+  <h2 style="color:var(--err)">⚠️ Полная очистка базы знаний</h2>
+  <p class="desc">Необратимо удаляет <b>ВСЕ</b> загруженные файлы, все записи в базе, весь
+    поисковый индекс и все картинки этого инстанса. Настройки, ключи API и промпты — не
+    трогает. Используйте, чтобы начать загрузку архива заново с чистого листа.</p>
+  <form method="post" action="/admin/wipe_all"
+        onsubmit="return confirm('Точно удалить ВСЮ базу знаний целиком (файлы, индекс, картинки)? Это необратимо.');">
+    <div class="row" style="align-items:flex-end; gap:12px">
+      <div style="flex:1; min-width:260px">
+        <label>Введите «УДАЛИТЬ ВСЁ» для подтверждения</label>
+        <input type="text" name="confirm" placeholder="УДАЛИТЬ ВСЁ" autocomplete="off" required>
+      </div>
+      <button type="submit" style="background:var(--err); border-color:var(--err)">🗑️ Удалить всё</button>
+    </div>
+  </form>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  (function(){
+    var el = document.getElementById('diskinfo');
+    if(!el) return;
+    fetch('/admin/disk', {headers:{'Accept':'application/json'}})
+      .then(function(r){ return r.json(); })
+      .then(function(d){
+        var pct = d.disk_total ? Math.round(100*d.disk_used/d.disk_total) : 0;
+        var color = pct > 85 ? 'var(--err)' : (pct > 70 ? 'var(--warn)' : 'var(--accent)');
+        el.innerHTML =
+          '<div class="row" style="justify-content:space-between;margin-bottom:8px">'
+          + '<span>Свободно: <b style="color:var(--text)">' + kbBytes(d.disk_free) + '</b> из ' + kbBytes(d.disk_total) + '</span>'
+          + '<span class="faint">' + pct + '% занято</span></div>'
+          + '<div class="progress" style="margin-bottom:18px"><div style="width:' + pct + '%;background:' + color + '"></div></div>'
+          + '<div class="grid c4">'
+          + '<div class="stat" style="box-shadow:none"><div class="k">База данных</div><div class="v" style="font-size:18px">' + kbBytes(d.db) + '</div></div>'
+          + '<div class="stat" style="box-shadow:none"><div class="k">Файлы базы знаний</div><div class="v" style="font-size:18px">' + kbBytes(d.kb_files) + '</div></div>'
+          + '<div class="stat" style="box-shadow:none"><div class="k">Индекс Qdrant</div><div class="v" style="font-size:18px">' + kbBytes(d.qdrant) + '</div></div>'
+          + '<div class="stat" style="box-shadow:none"><div class="k">Кэш модели</div><div class="v" style="font-size:18px">' + kbBytes(d.model_cache) + '</div></div>'
+          + '</div>';
+      })
+      .catch(function(){ el.textContent = 'Не удалось получить данные о диске.'; });
+  })();
+</script>
+{% endblock %}

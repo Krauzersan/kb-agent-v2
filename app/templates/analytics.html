@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}Аналитика — база знаний{% endblock %}
+{% block page_title %}Аналитика{% endblock %}
+
+{% block content %}
+
+<p class="desc" style="margin:-6px 0 16px">О чём чаще всего спрашивают агента и какие темы стоит
+  дополнить в базе знаний. Темы определяются автоматически той же моделью, что отвечает агенту —
+  по кнопке ниже, не в реальном времени на каждый вопрос.</p>
+
+<div class="card" style="margin-bottom:18px">
+  <h2>Разметка тем</h2>
+  <p class="desc">
+    {% if untagged %}
+      <b>{{ untagged }}</b> вопрос(ов) в логе ещё без темы.
+    {% else %}
+      Все вопросы в логе уже размечены темами.
+    {% endif %}
+  </p>
+  <form method="post" action="/admin/analytics/backfill">
+    <button class="ghost" type="submit" {{ 'disabled' if not untagged else '' }}>
+      🏷 Обновить анализ ({{ untagged }})
+    </button>
+  </form>
+</div>
+
+{% if gaps %}
+<div class="card" style="margin-bottom:18px; border:1px solid var(--warn)">
+  <h2>Пробелы в базе знаний</h2>
+  <p class="desc">Темы, по которым агент отвечал вообще без опоры на базу (ничего релевантного не
+    нашлось) — сильный кандидат на то, что стоит добавить или расширить в базе.</p>
+  <div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Тема</th>
+        <th style="text-align:right">Вопросов</th>
+        <th style="text-align:right">Без источников</th>
+        <th style="text-align:right">Средняя оценка</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in gaps %}
+      <tr>
+        <td><a href="/admin/analytics/topic/{{ t.topic | urlencode }}">{{ t.topic }}</a></td>
+        <td style="text-align:right">{{ t.questions }}</td>
+        <td style="text-align:right"><span class="badge err">{{ t.no_sources }}</span></td>
+        <td style="text-align:right">
+          {% if t.avg_rating is none %}<span class="faint">—</span>
+          {% else %}<span class="badge {% if t.avg_rating >= 8 %}ok{% elif t.avg_rating >= 5 %}warn{% else %}err{% endif %}">{{ t.avg_rating }}/10</span>{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% endif %}
+
+{% if topics %}
+<div class="card">
+  <h2>Все темы</h2>
+  <div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Тема</th>
+        <th style="text-align:right">Вопросов</th>
+        <th style="text-align:right">Оценено</th>
+        <th style="text-align:right">Средняя оценка</th>
+        <th style="text-align:right">Без источников</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for t in topics %}
+      <tr>
+        <td><a href="/admin/analytics/topic/{{ t.topic | urlencode }}">{{ t.topic }}</a></td>
+        <td style="text-align:right">{{ t.questions }}</td>
+        <td style="text-align:right">{{ t.rated }}</td>
+        <td style="text-align:right">
+          {% if t.avg_rating is none %}<span class="faint">—</span>
+          {% else %}<span class="badge {% if t.avg_rating >= 8 %}ok{% elif t.avg_rating >= 5 %}warn{% else %}err{% endif %}">{{ t.avg_rating }}/10</span>{% endif %}
+        </td>
+        <td style="text-align:right">{% if t.no_sources %}<span class="badge warn">{{ t.no_sources }}</span>{% else %}<span class="faint">0</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% else %}
+<div class="card"><div class="empty"><div class="ico">📊</div>
+  Пока нет ни одной размеченной темы — нажмите «Обновить анализ» выше.
+</div></div>
+{% endif %}
+
+{% endblock %}

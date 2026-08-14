@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+{% block title %}Лог вопросов — база знаний{% endblock %}
+{% block page_title %}Лог вопросов{% endblock %}
+{% block actions %}
+  <form method="post" action="/admin/logs/clear" style="display:inline"
+        onsubmit="return confirm('Удалить весь лог вопросов? Это необратимо.')">
+    <button class="ghost sm danger" type="submit">Очистить лог</button>
+  </form>
+{% endblock %}
+
+{% block content %}
+
+<p class="desc" style="margin:-6px 0 16px">Реальные вопросы агенту (Пачка, Omnidesk, тест из панели) и источники,
+  на которых построен каждый ответ. Клик по источнику открывает нужный файл сразу на нужном фрагменте — если ответ
+  оказался неверным, можно сразу перейти и поправить статью.</p>
+
+{% if request.query_params.get('cleared') is not none %}
+<div class="alert ok" style="margin:0 0 16px">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6L9 17l-5-5"/></svg>
+  <div class="txt">Лог очищен — удалено записей: {{ request.query_params.get('cleared') }}.</div>
+</div>
+{% endif %}
+
+<div class="card" style="margin-bottom:16px">
+  <form method="get" action="/admin/logs" class="row" style="gap:10px">
+    <div style="position:relative; flex:1">
+      <input type="search" name="q" value="{{ q }}" placeholder="Поиск по тексту вопроса или ответа…" style="padding-left:33px">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+           style="width:15px;height:15px;position:absolute;left:11px;top:11px;color:var(--faint)"><circle cx="11" cy="11" r="7"/><path d="M21 21l-3.5-3.5"/></svg>
+    </div>
+    <button type="submit" class="ghost">Найти</button>
+    {% if q %}<a class="btn ghost" href="/admin/logs">Сбросить</a>{% endif %}
+  </form>
+</div>
+
+{% if entries %}
+<div class="faint" style="margin-bottom:10px">Всего записей: {{ total }}{% if q %} (по запросу «{{ q }}»){% endif %}</div>
+
+{% for e in entries %}
+<div class="card" style="margin-bottom:11px">
+  <div class="row" style="justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:8px">
+    <div class="row" style="gap:9px">
+      <span class="badge neutral">{{ e.created_at }}</span>
+      <span class="badge {% if e.channel == 'external' %}warn{% elif e.asker_name %}accent{% else %}neutral{% endif %}">
+        {% if e.channel == 'external' %}внешний (Omnidesk){% elif e.asker_name %}внутренний (Пачка){% else %}внутренний{% endif %}</span>
+      {% if e.mode and e.mode != 'top_k' %}<span class="badge neutral">режим: {{ e.mode }}</span>{% endif %}
+      {% if e.asker_name %}<span class="badge neutral">{{ e.asker_name }}</span>{% endif %}
+      {% if e.rating is not none %}
+        <span class="badge {% if e.rating >= 8 %}ok{% elif e.rating >= 5 %}warn{% else %}err{% endif %}">оценка: {{ e.rating }}/10</span>
+      {% endif %}
+    </div>
+  </div>
+
+  <div style="margin-bottom:9px">
+    <div class="faint" style="font-size:11.6px; letter-spacing:.03em; margin-bottom:3px">ВОПРОС</div>
+    <div>{{ e.question }}</div>
+  </div>
+
+  <div style="margin-bottom:{% if e.sources %}9px{% else %}0{% endif %}">
+    <div class="faint" style="font-size:11.6px; letter-spacing:.03em; margin-bottom:3px">ОТВЕТ</div>
+    <div class="answer-collapsed">{{ e.answer }}</div>
+  </div>
+
+  {% if e.sources %}
+  <div>
+    <div class="faint" style="font-size:11.6px; letter-spacing:.03em; margin-bottom:5px">ИСТОЧНИКИ</div>
+    <div class="row" style="gap:6px; flex-wrap:wrap">
+      {% for s in e.sources %}
+        {% if s.file_id %}
+        <a class="btn ghost sm" href="/admin/file/{{ s.file_id }}{% if s.chunk_index is not none %}#chunk-{{ s.chunk_index }}{% endif %}"
+           title="score: {{ s.score }}" target="_blank" rel="noopener">
+          {% if s.priority %}★ {% endif %}{{ s.filename }}
+        </a>
+        {% else %}
+        <span class="badge neutral">{{ s.filename }}</span>
+        {% endif %}
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endfor %}
+
+{% if pages > 1 %}
+<div class="row" style="justify-content:center; gap:8px; margin-top:16px">
+  {% if page > 1 %}<a class="btn ghost sm" href="/admin/logs?page={{ page - 1 }}&q={{ q }}">← Раньше</a>{% endif %}
+  <span class="faint">стр. {{ page }} из {{ pages }}</span>
+  {% if page < pages %}<a class="btn ghost sm" href="/admin/logs?page={{ page + 1 }}&q={{ q }}">Позже →</a>{% endif %}
+</div>
+{% endif %}
+
+{% else %}
+<div class="card"><div class="empty"><div class="ico">🗒</div>
+  {% if q %}Ничего не найдено по запросу «{{ q }}».{% else %}Пока нет ни одного залогированного вопроса.{% endif %}
+</div></div>
+{% endif %}
+
+<style>
+  .answer-collapsed{
+    max-height:110px; overflow:hidden; white-space:pre-wrap; word-break:break-word;
+    font-size:13.5px; line-height:1.55; position:relative; cursor:pointer;
+  }
+  .answer-collapsed.expanded{ max-height:none; cursor:default }
+  .answer-collapsed:not(.expanded)::after{
+    content:'Показать полностью…'; position:absolute; bottom:0; right:0; left:0;
+    padding:20px 0 2px; text-align:right; font-size:12px; color:var(--accent-text);
+    background:linear-gradient(to bottom, transparent, var(--surface) 65%);
+  }
+</style>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.querySelectorAll('.answer-collapsed').forEach(function(el){
+    if(el.scrollHeight <= el.clientHeight + 4) return;
+    el.addEventListener('click', function(){ el.classList.add('expanded'); });
+  });
+</script>
+{% endblock %}

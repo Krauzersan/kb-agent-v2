@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}{{ topic_name }} — Аналитика{% endblock %}
+{% block page_title %}{{ topic_name }}{% endblock %}
+{% block actions %}
+  <a class="btn ghost sm" href="/admin/analytics">← Ко всем темам</a>
+{% endblock %}
+
+{% block content %}
+
+{% if entries %}
+{% for e in entries %}
+<div class="card" style="margin-bottom:11px">
+  <div class="row" style="justify-content:space-between; align-items:flex-start; gap:10px; margin-bottom:8px">
+    <div class="row" style="gap:9px; flex-wrap:wrap">
+      <span class="badge neutral">{{ e.created_at }}</span>
+      <span class="badge {% if e.channel == 'external' %}warn{% elif e.asker_name %}accent{% else %}neutral{% endif %}">
+        {% if e.channel == 'external' %}внешний (Omnidesk){% elif e.asker_name %}внутренний (Пачка){% else %}внутренний{% endif %}</span>
+      {% if e.asker_name %}<span class="badge neutral">{{ e.asker_name }}</span>{% endif %}
+      {% if e.rating is not none %}
+        <span class="badge {% if e.rating >= 8 %}ok{% elif e.rating >= 5 %}warn{% else %}err{% endif %}">оценка: {{ e.rating }}/10</span>
+      {% endif %}
+      {% if not e.sources %}<span class="badge err">без источников</span>{% endif %}
+    </div>
+  </div>
+
+  <div class="qa-question" style="margin-bottom:12px">{{ e.question }}</div>
+
+  <div class="answer-collapsed">{{ e.answer }}</div>
+</div>
+{% endfor %}
+{% else %}
+<div class="card"><div class="empty"><div class="ico">📊</div>
+  По этой теме пока нет вопросов.
+</div></div>
+{% endif %}
+
+<style>
+  .qa-question{
+    font-size:16px; font-weight:650; line-height:1.45; color:var(--text);
+    padding-left:12px; border-left:3px solid var(--accent);
+  }
+  .answer-collapsed{
+    max-height:220px; overflow:hidden; white-space:pre-wrap; word-break:break-word;
+    font-size:14.5px; line-height:1.65; position:relative; cursor:pointer;
+  }
+  .answer-collapsed.expanded{ max-height:none; cursor:default }
+  .answer-collapsed:not(.expanded)::after{
+    content:'Показать полностью…'; position:absolute; bottom:0; right:0; left:0;
+    padding:24px 0 2px; text-align:right; font-size:12.5px; color:var(--accent-text);
+    background:linear-gradient(to bottom, transparent, var(--surface) 65%);
+  }
+</style>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.querySelectorAll('.answer-collapsed').forEach(function(el){
+    if(el.scrollHeight <= el.clientHeight + 4) return;
+    el.addEventListener('click', function(){ el.classList.add('expanded'); });
+  });
+</script>
+{% endblock %}

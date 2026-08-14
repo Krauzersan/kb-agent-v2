@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}Метрики — база знаний{% endblock %}
+{% block page_title %}Метрики{% endblock %}
+
+{% block content %}
+
+<p class="desc" style="margin:-6px 0 16px">Кто чаще всего спрашивает агента в Пачке и как оценивает его ответы.
+  После каждого ответа в треде бот просит поставить оценку от 1 до 10 — сотрудник просто отвечает числом.
+  Включить/выключить — в <a href="/admin/settings#pachca">настройках Пачки</a>.</p>
+
+<div class="grid c3" style="margin-bottom:18px">
+  <div class="stat">
+    <div class="k">Вопросов в тредах</div>
+    <div class="v">{{ overview.questions }}</div>
+    <div class="s">всего за всё время</div>
+  </div>
+  <div class="stat">
+    <div class="k">Оценено</div>
+    <div class="v">{{ overview.rated }}</div>
+    <div class="s">{% if overview.questions %}{{ (100 * overview.rated / overview.questions) | round | int }}% от всех вопросов{% else %}пока нет данных{% endif %}</div>
+  </div>
+  <div class="stat">
+    <div class="k">Средняя оценка</div>
+    <div class="v" style="{% if overview.avg_rating is none %}color:var(--muted){% elif overview.avg_rating >= 8 %}color:var(--ok){% elif overview.avg_rating >= 5 %}color:var(--warn){% else %}color:var(--err){% endif %}">
+      {{ overview.avg_rating if overview.avg_rating is not none else '—' }}{% if overview.avg_rating is not none %}<span style="font-size:14px;color:var(--faint)">/10</span>{% endif %}
+    </div>
+    <div class="s">по оценённым ответам</div>
+  </div>
+</div>
+
+{% if users %}
+  <div class="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th>Сотрудник</th>
+        <th style="text-align:right">Вопросов</th>
+        <th style="text-align:right">Оценено</th>
+        <th style="text-align:right">Средняя оценка</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for u in users %}
+      <tr>
+        <td>
+          {% if u.asker_user_id %}
+            <a href="/admin/metrics/user/{{ u.asker_user_id }}">{{ u.asker_name }}</a>
+          {% else %}
+            {{ u.asker_name }}
+          {% endif %}
+        </td>
+        <td style="text-align:right">{{ u.questions }}</td>
+        <td style="text-align:right">{{ u.rated }}</td>
+        <td style="text-align:right">
+          {% if u.avg_rating is none %}
+            <span class="faint">—</span>
+          {% else %}
+            <span class="badge {% if u.avg_rating >= 8 %}ok{% elif u.avg_rating >= 5 %}warn{% else %}err{% endif %}">{{ u.avg_rating }}/10</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+{% else %}
+<div class="card"><div class="empty"><div class="ico">📊</div>
+  Пока нет ни одного вопроса, заданного в треде Пачки.
+</div></div>
+{% endif %}
+
+{% endblock %}

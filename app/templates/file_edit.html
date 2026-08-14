@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Редактирование — {{ f.filename }}{% endblock %}
+{% block page_title %}Редактировать: {{ f.filename }}{% endblock %}
+{% block actions %}
+  <a class="btn ghost sm" href="/admin/file/{{ f.id }}">← К файлу</a>
+{% endblock %}
+
+{% block content %}
+
+{% if editable %}
+<div class="card">
+  <h2>Текст файла</h2>
+  <p class="desc">Правите исходный текст напрямую. После сохранения файл автоматически переиндексируется.</p>
+  <form method="post" action="/admin/file/{{ f.id }}/edit">
+    <div class="field">
+      <textarea name="text" rows="24" spellcheck="false"
+                style="width:100%; resize:vertical; font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+                font-size:12.8px; line-height:1.6; padding:13px 15px; border:1px solid var(--line-2);
+                border-radius:var(--r); background:var(--surface-2); color:inherit">{{ content }}</textarea>
+    </div>
+    <button type="submit">Сохранить и переиндексировать</button>
+  </form>
+</div>
+{% else %}
+<div class="card">
+  <div class="alert warn">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+    <div class="txt">Формат «{{ f.filename.rsplit('.', 1)[-1] }}» нельзя редактировать как текст напрямую —
+      загрузите новую версию файла, чтобы заменить содержимое (см. ниже).</div>
+  </div>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Заменить файл целиком</h2>
+  <p class="desc">Загрузите новую версию — она займёт место текущей (тот же файл в списке), старая версия будет удалена.</p>
+  {% if request.query_params.get('err') == 'type' %}
+  <div class="alert err" style="margin:0 0 12px">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+    <div class="txt">Неподдерживаемый тип файла.</div>
+  </div>
+  {% endif %}
+  <form method="post" action="/admin/file/{{ f.id }}/replace" enctype="multipart/form-data">
+    <div class="field">
+      <input type="file" name="file" required>
+    </div>
+    <button type="submit" class="ghost">Заменить и переиндексировать</button>
+  </form>
+</div>
+
+{% endblock %}

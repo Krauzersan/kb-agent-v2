@@ -1,0 +1,536 @@
+{% extends "base.html" %}
+{% block title %}Настройки — база знаний{% endblock %}
+{% block page_title %}Настройки{% endblock %}
+{% block actions %}
+  <button type="submit" form="setform">Сохранить</button>
+{% endblock %}
+
+{% block head_extra %}
+<style>
+  .providers{display:grid; grid-template-columns:repeat(4,1fr); gap:11px}
+  .prov{
+    border:1.5px solid var(--line-2); border-radius:var(--r); padding:14px; cursor:pointer;
+    transition:.14s; background:var(--surface); margin:0; font-weight:400;
+  }
+  .prov:hover{border-color:var(--accent); background:var(--surface-2)}
+  .prov.active{border-color:var(--accent); background:var(--accent-weak); box-shadow:0 0 0 3px var(--accent-weak)}
+  .prov input{display:none}
+  .prov h3{font-size:14.5px; margin-bottom:3px}
+  .prov p{margin:0; font-size:12.3px; color:var(--muted)}
+  .tabs{display:flex; gap:4px; border-bottom:1px solid var(--line); margin-bottom:20px; overflow-x:auto}
+  .tabs button{
+    background:transparent; color:var(--muted); border:none; border-bottom:2px solid transparent;
+    border-radius:0; padding:10px 15px; font-size:13.6px; font-weight:540; white-space:nowrap;
+  }
+  .tabs button:hover{background:transparent; color:var(--text)}
+  .tabs button.active{color:var(--accent-text); border-bottom-color:var(--accent)}
+  .pane{display:none}
+  .pane.active{display:block}
+  @media(max-width:900px){ .providers{grid-template-columns:repeat(2,1fr)} }
+  @media(max-width:500px){ .providers{grid-template-columns:1fr} }
+</style>
+{% endblock %}
+
+{% block content %}
+
+{% if saved %}
+<div class="alert ok">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6L9 17l-5-5"/></svg>
+  <div class="txt"><b>Сохранено.</b> Новые настройки уже действуют.</div>
+</div>
+{% endif %}
+
+<div class="tabs" id="tabs">
+  <button type="button" class="active" data-p="agent">Агент и промпт</button>
+  <button type="button" data-p="model">Модель ИИ</button>
+  <button type="button" data-p="search">Поиск</button>
+  <button type="button" data-p="pachca">Пачка</button>
+  <button type="button" data-p="omni">Omnidesk</button>
+</div>
+
+<form method="post" action="/admin/settings" id="setform">
+  <input type="hidden" name="full_form" value="1">
+
+  <!-- ---------- Агент и промпт ---------- -->
+  <div class="pane active" data-p="agent">
+    <div class="card">
+      <h2>Роль агента</h2>
+      <p class="desc">Кто такой агент и как ему общаться. Правила «не выдумывать», краткость
+        и написание «MAXMA» добавляются автоматически.</p>
+      <textarea name="agent_role" style="min-height:210px">{{ s.agent_role }}</textarea>
+      <span class="hint">Например: «Ты — эксперт платформы MAXMA в трёх ролях: инженер техподдержки, интегратор, CRM-маркетолог…»</span>
+    </div>
+
+    <div class="card">
+      <h2>Правила ответа</h2>
+      <p class="desc">Насколько строго держаться базы знаний.
+        <b>Строгий</b> — только по базе, иначе честно «не нашёл». <b>Гибридный</b> — может предлагать
+        свои решения, помечая их как экспертное мнение.</p>
+      <div class="seg" id="rulesSeg" style="margin-bottom:12px">
+        <button type="button" data-mode="strict">Строгий</button>
+        <button type="button" data-mode="hybrid">Гибридный</button>
+      </div>
+      <textarea name="rag_rules" id="rulesText" style="min-height:160px">{{ s.rag_rules }}</textarea>
+      <span class="hint">Кнопки подставляют готовый текст — его можно доредактировать вручную.</span>
+    </div>
+  </div>
+
+  <!-- ---------- Модель ИИ ---------- -->
+  <div class="pane" data-p="model">
+    <div class="card">
+      <h2>Провайдер</h2>
+      <p class="desc">Кто генерирует ответы. База знаний и поиск работают одинаково со всеми —
+        переключение не требует переиндексации. Ключи хранятся на сервере и здесь не показываются.</p>
+      <div class="providers">
+        <label class="prov" data-prov="claude">
+          <input type="radio" name="llm_provider" value="claude" {% if s.llm_provider == 'claude' %}checked{% endif %}>
+          <h3>Claude</h3><p>Anthropic · сильный в рассуждениях</p>
+        </label>
+        <label class="prov" data-prov="openai">
+          <input type="radio" name="llm_provider" value="openai" {% if s.llm_provider == 'openai' %}checked{% endif %}>
+          <h3>ChatGPT</h3><p>OpenAI · gpt-4o и другие</p>
+        </label>
+        <label class="prov" data-prov="deepseek">
+          <input type="radio" name="llm_provider" value="deepseek" {% if s.llm_provider == 'deepseek' %}checked{% endif %}>
+          <h3>DeepSeek</h3><p>дешевле, часто доступен из РФ</p>
+        </label>
+        <label class="prov" data-prov="gigachat">
+          <input type="radio" name="llm_provider" value="gigachat" {% if s.llm_provider == 'gigachat' %}checked{% endif %}>
+          <h3>GigaChat</h3><p>Сбер · российский, без VPN</p>
+        </label>
+      </div>
+
+      <hr>
+
+      <div class="prov-fields" data-for="claude">
+        <div class="field">
+          <label>API-ключ Claude
+            {% if s.anthropic_api_key__is_set %}<span class="badge ok">сохранён</span>{% else %}<span class="badge err">не задан</span>{% endif %}
+          </label>
+          <input type="password" name="anthropic_api_key" placeholder="sk-ant-… (пусто = оставить как есть)">
+        </div>
+        <div class="field">
+          <label>Модель Claude</label>
+          {% set copts = ['claude-sonnet-5','claude-opus-5','claude-fable-5','claude-sonnet-4-6','claude-haiku-4-5','claude-opus-4-8'] %}
+          <select name="claude_model">
+            {% if s.claude_model and s.claude_model not in copts %}<option value="{{ s.claude_model }}" selected>{{ s.claude_model }} (текущая)</option>{% endif %}
+            <option value="claude-sonnet-5" {% if s.claude_model=='claude-sonnet-5' %}selected{% endif %}>claude-sonnet-5 — баланс скорости и качества</option>
+            <option value="claude-opus-5" {% if s.claude_model=='claude-opus-5' %}selected{% endif %}>claude-opus-5 — умнее, для сложных вопросов</option>
+            <option value="claude-fable-5" {% if s.claude_model=='claude-fable-5' %}selected{% endif %}>claude-fable-5 — самая мощная, дороже всех</option>
+            <option value="claude-sonnet-4-6" {% if s.claude_model=='claude-sonnet-4-6' %}selected{% endif %}>claude-sonnet-4-6 — предыдущее поколение</option>
+            <option value="claude-haiku-4-5" {% if s.claude_model=='claude-haiku-4-5' %}selected{% endif %}>claude-haiku-4-5 — быстрее и дешевле</option>
+            <option value="claude-opus-4-8" {% if s.claude_model=='claude-opus-4-8' %}selected{% endif %}>claude-opus-4-8 — предыдущее поколение Opus</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="prov-fields" data-for="openai">
+        <div class="field">
+          <label>API-ключ OpenAI
+            {% if s.openai_api_key__is_set %}<span class="badge ok">сохранён</span>{% else %}<span class="badge err">не задан</span>{% endif %}
+          </label>
+          <input type="password" name="openai_api_key" placeholder="sk-… (пусто = оставить как есть)">
+        </div>
+        <div class="field">
+          <label>Модель OpenAI</label>
+          {% set oopts = ['gpt-5.6-sol','gpt-5.6-terra','gpt-5.6-luna','gpt-4.1','gpt-4o','gpt-4o-mini'] %}
+          <select name="openai_model">
+            {% if s.openai_model and s.openai_model not in oopts %}<option value="{{ s.openai_model }}" selected>{{ s.openai_model }} (текущая)</option>{% endif %}
+            <option value="gpt-5.6-sol" {% if s.openai_model=='gpt-5.6-sol' %}selected{% endif %}>gpt-5.6-sol — новейшая, максимум интеллекта</option>
+            <option value="gpt-5.6-terra" {% if s.openai_model=='gpt-5.6-terra' %}selected{% endif %}>gpt-5.6-terra — баланс (рекомендовано)</option>
+            <option value="gpt-5.6-luna" {% if s.openai_model=='gpt-5.6-luna' %}selected{% endif %}>gpt-5.6-luna — быстрее и дешевле</option>
+            <option value="gpt-4.1" {% if s.openai_model=='gpt-4.1' %}selected{% endif %}>gpt-4.1 — предыдущее поколение</option>
+            <option value="gpt-4o" {% if s.openai_model=='gpt-4o' %}selected{% endif %}>gpt-4o — предыдущее поколение</option>
+            <option value="gpt-4o-mini" {% if s.openai_model=='gpt-4o-mini' %}selected{% endif %}>gpt-4o-mini — дешевле, предыдущее поколение</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Глубина размышлений OpenAI (effort)<span class="help">?<span class="tip">Только для «думающих» моделей gpt-5.x — на gpt-4o/gpt-4.1 не действует.</span></span></label>
+          <select name="openai_effort">
+            <option value="minimal" {% if s.openai_effort=='minimal' %}selected{% endif %}>minimal — быстрее всего</option>
+            <option value="low" {% if s.openai_effort=='low' %}selected{% endif %}>low</option>
+            <option value="medium" {% if s.openai_effort=='medium' %}selected{% endif %}>medium — баланс (рекомендовано)</option>
+            <option value="high" {% if s.openai_effort=='high' %}selected{% endif %}>high — максимум качества</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="prov-fields" data-for="deepseek">
+        <div class="field">
+          <label>API-ключ DeepSeek
+            {% if s.deepseek_api_key__is_set %}<span class="badge ok">сохранён</span>{% else %}<span class="badge err">не задан</span>{% endif %}
+          </label>
+          <input type="password" name="deepseek_api_key" placeholder="ключ DeepSeek (пусто = оставить как есть)">
+        </div>
+        <div class="field">
+          <label>Модель DeepSeek</label>
+          {% set dopts = ['deepseek-v4-pro','deepseek-v4-flash','deepseek-chat','deepseek-reasoner'] %}
+          <select name="deepseek_model">
+            {% if s.deepseek_model and s.deepseek_model not in dopts %}<option value="{{ s.deepseek_model }}" selected>{{ s.deepseek_model }} (текущая)</option>{% endif %}
+            <option value="deepseek-v4-pro" {% if s.deepseek_model=='deepseek-v4-pro' %}selected{% endif %}>deepseek-v4-pro — новейшая, рассуждающая (рекомендовано)</option>
+            <option value="deepseek-v4-flash" {% if s.deepseek_model=='deepseek-v4-flash' %}selected{% endif %}>deepseek-v4-flash — быстрее и дешевле</option>
+            <option value="deepseek-chat" {% if s.deepseek_model=='deepseek-chat' %}selected{% endif %}>deepseek-chat — предыдущее поколение</option>
+            <option value="deepseek-reasoner" {% if s.deepseek_model=='deepseek-reasoner' %}selected{% endif %}>deepseek-reasoner — предыдущее поколение, рассуждающая</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Глубина размышлений DeepSeek (effort)<span class="help">?<span class="tip">Только для рассуждающих моделей (deepseek-v4-pro, deepseek-reasoner) — на deepseek-chat/v4-flash не действует.</span></span></label>
+          <select name="deepseek_effort">
+            <option value="low" {% if s.deepseek_effort=='low' %}selected{% endif %}>low — быстрее</option>
+            <option value="high" {% if s.deepseek_effort=='high' %}selected{% endif %}>high — баланс (рекомендовано)</option>
+            <option value="max" {% if s.deepseek_effort=='max' %}selected{% endif %}>max — максимум качества</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="prov-fields" data-for="gigachat">
+        <div class="field">
+          <label>Authorization key GigaChat
+            {% if s.gigachat_auth_key__is_set %}<span class="badge ok">сохранён</span>{% else %}<span class="badge err">не задан</span>{% endif %}
+            <span class="help">?<span class="tip">Личный кабинет developers.sber.ru → раздел GigaChat API → «Получить ключ». Это уже готовая строка (client_id и secret в одном), просто вставьте её сюда — кодировать ничего не нужно.</span></span>
+          </label>
+          <input type="password" name="gigachat_auth_key" placeholder="Authorization key (пусто = оставить как есть)">
+        </div>
+        <div class="field">
+          <label>Тариф (scope)</label>
+          {% set gsopts = ['GIGACHAT_API_PERS','GIGACHAT_API_B2B','GIGACHAT_API_CORP'] %}
+          <select name="gigachat_scope">
+            <option value="GIGACHAT_API_PERS" {% if s.gigachat_scope=='GIGACHAT_API_PERS' %}selected{% endif %}>GIGACHAT_API_PERS — физлицо</option>
+            <option value="GIGACHAT_API_B2B" {% if s.gigachat_scope=='GIGACHAT_API_B2B' %}selected{% endif %}>GIGACHAT_API_B2B — юрлицо/ИП, пакет</option>
+            <option value="GIGACHAT_API_CORP" {% if s.gigachat_scope=='GIGACHAT_API_CORP' %}selected{% endif %}>GIGACHAT_API_CORP — юрлицо/ИП, pay-as-you-go</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Модель GigaChat</label>
+          {% set gmopts = ['GigaChat-2','GigaChat-2-Pro','GigaChat-2-Max','GigaChat-2-Lite'] %}
+          <select name="gigachat_model">
+            {% if s.gigachat_model and s.gigachat_model not in gmopts %}<option value="{{ s.gigachat_model }}" selected>{{ s.gigachat_model }} (текущая)</option>{% endif %}
+            <option value="GigaChat-2" {% if s.gigachat_model=='GigaChat-2' %}selected{% endif %}>GigaChat-2 — баланс (рекомендовано)</option>
+            <option value="GigaChat-2-Pro" {% if s.gigachat_model=='GigaChat-2-Pro' %}selected{% endif %}>GigaChat-2-Pro — умнее</option>
+            <option value="GigaChat-2-Max" {% if s.gigachat_model=='GigaChat-2-Max' %}selected{% endif %}>GigaChat-2-Max — максимум качества</option>
+            <option value="GigaChat-2-Lite" {% if s.gigachat_model=='GigaChat-2-Lite' %}selected{% endif %}>GigaChat-2-Lite — быстрее и дешевле</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>Сертификат для TLS (Минцифры)<span class="help">?<span class="tip">Серверы GigaChat используют TLS-сертификат российского CA — без него соединение обрывается по SSL. Файл лежит на сервере и обычно не требует внимания; обновляйте, если он скоро истекает или запросы к GigaChat вдруг стали падать по SSL.</span></span></label>
+          <div class="row" style="gap:10px; align-items:center; flex-wrap:wrap">
+            {% if gigachat_cert.ok %}
+              <span class="badge {% if gigachat_cert.days_left < 30 %}err{% elif gigachat_cert.days_left < 90 %}warn{% else %}ok{% endif %}">
+                действителен до {{ gigachat_cert.expires }} (осталось {{ gigachat_cert.days_left }} дн.)
+              </span>
+            {% else %}
+              <span class="badge err">не удалось прочитать: {{ gigachat_cert.error }}</span>
+            {% endif %}
+            <button type="button" id="gigachatCertBtn" class="btn ghost sm">Обновить сертификат</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Параметры генерации</h2>
+      <div class="field">
+        <label>Длина ответа (максимум токенов)<span class="help">?<span class="tip">Ограничивает длину ответа. 1 токен ≈ 3–4 символа. Больше — подробнее, но дороже и медленнее. Обычно хватает 500–1500.</span></span></label>
+        <div class="slider-row">
+          <input type="range" name="claude_max_tokens" min="256" max="4000" step="128" value="{{ s.claude_max_tokens }}"
+                 oninput="document.getElementById('tokval').textContent=this.value">
+          <span class="sliderval" id="tokval">{{ s.claude_max_tokens }}</span>
+        </div>
+      </div>
+      <div class="field">
+        <label>Глубина размышлений (effort)<span class="help">?<span class="tip">Насколько тщательно модель обдумывает ответ. Выше — точнее и подробнее, но медленнее и дороже. high — рекомендуемый баланс, xhigh/max — для самых сложных вопросов.</span></span></label>
+        <select name="claude_effort">
+          <option value="low" {% if s.claude_effort=='low' %}selected{% endif %}>low — быстро и дёшево</option>
+          <option value="medium" {% if s.claude_effort=='medium' %}selected{% endif %}>medium</option>
+          <option value="high" {% if s.claude_effort=='high' %}selected{% endif %}>high — баланс (рекомендовано)</option>
+          <option value="xhigh" {% if s.claude_effort=='xhigh' %}selected{% endif %}>xhigh — для сложных вопросов</option>
+          <option value="max" {% if s.claude_effort=='max' %}selected{% endif %}>max — максимум качества</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Прокси для ИИ (если сервер в заблокированном регионе)</label>
+        <input type="text" name="claude_proxy" value="{{ s.claude_proxy }}"
+               placeholder="http://user:pass@host:port  или  socks5://host:port">
+        <span class="hint">Применяется ко всем провайдерам.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ---------- Поиск ---------- -->
+  <div class="pane" data-p="search">
+    <div class="card">
+      <h2>Поиск по базе знаний</h2>
+      <div class="field">
+        <label>Сколько выдержек брать из базы (top-k)<span class="help">?<span class="tip">Сколько похожих фрагментов передавать модели как контекст. Больше — шире охват, но больше «шума» и дороже. Обычно оптимально 3–8.</span></span></label>
+        <div class="slider-row">
+          <input type="range" name="top_k" min="1" max="15" step="1" value="{{ s.top_k }}"
+                 oninput="document.getElementById('topkval').textContent=this.value">
+          <span class="sliderval" id="topkval">{{ s.top_k }}</span>
+        </div>
+      </div>
+      <div class="field">
+        <label>Сила приоритета файлов ★<span class="help">?<span class="tip">Насколько сильнее «приоритетные» файлы (★) поднимаются в выдаче. «Мягкий» комбинирует их с обычными; «Жёсткий» почти всегда ставит первыми; «Выкл» — приоритет не влияет.</span></span></label>
+        <input type="hidden" name="priority_boost" id="prioVal" value="{{ s.priority_boost }}">
+        <div class="seg" id="prioSeg">
+          <button type="button" data-v="0">Выкл</button>
+          <button type="button" data-v="0.06">Мягкий</button>
+          <button type="button" data-v="0.11">Средний</button>
+          <button type="button" data-v="0.18">Жёсткий</button>
+        </div>
+        <span class="hint">Действует на файлы, помеченные ★ в списке базы знаний.</span>
+      </div>
+      <div class="field">
+        <label>Порог релевантности (защита от выдумок)<span class="help">?<span class="tip">Если найденные фрагменты слабо похожи на вопрос, агент не строит на них ответ, а честно скажет «в базе нет». 0 — выключено. Начните с 0.70: слишком часто отказывается — снизьте, выдумывает — повысьте.</span></span></label>
+        <div class="slider-row">
+          <input type="range" name="min_relevance" min="0" max="0.95" step="0.05" value="{{ s.min_relevance }}"
+                 oninput="document.getElementById('minrelval').textContent=(this.value==='0'?'выкл':this.value)">
+          <span class="sliderval" id="minrelval">{{ 'выкл' if s.min_relevance in ['0','0.0',0] else s.min_relevance }}</span>
+        </div>
+        <span class="hint">Реальные значения близости видно на странице «Тест агента».</span>
+      </div>
+      <div class="field">
+        <label>Ответ на вопросы «перечисли все / список всех»<span class="help">?<span class="tip">Обычный поиск отдаёт несколько похожих кусков текста — этого достаточно для точечного вопроса, но не для вопроса, ответ на который размазан по многим файлам (например «какие есть кассовые ПО» — у каждой кассы свой файл). Для таких вопросов агент автоматически переключается на один из двух режимов ниже.</span></span></label>
+        <input type="hidden" name="search_mode" id="searchModeVal" value="{{ s.search_mode }}">
+        <div class="seg" id="searchModeSeg">
+          <button type="button" data-v="auto">Каталог (быстро)</button>
+          <button type="button" data-v="full_scan">Полный обход (медленно)</button>
+        </div>
+        <span class="hint">
+          <b>Каталог</b> — секунды: агент смотрит краткое summary каждого файла (строится автоматически при загрузке, см. «Обслуживание» → «Каталог базы знаний»).<br>
+          <b>Полный обход</b> — минуты: агент реально прочитывает текст ВСЕХ файлов по очереди. Полнее, но намного медленнее и дороже — применяется ВЕЗДЕ, включая Пачку и Omnidesk, так что ответ бота на такой вопрос может занять несколько минут.
+        </span>
+      </div>
+      <div class="field">
+        <label>Публичный адрес сервиса<span class="help">?<span class="tip">Используется, чтобы строить ссылки на картинки из ZIP-импорта (папка kb_assets отдаётся по /assets/...). Поменяйте, если у сервиса изменится IP или появится домен.</span></span></label>
+        <input type="text" name="public_base_url" value="{{ s.public_base_url }}" placeholder="http://81.163.28.127:8746">
+      </div>
+    </div>
+  </div>
+
+  <!-- ---------- Пачка ---------- -->
+  <div class="pane" data-p="pachca">
+    <div class="card">
+      <h2>Пачка (бот)</h2>
+      <div class="field">
+        <label>Токен бота
+          {% if s.pachca_bot_token__is_set %}<span class="badge ok">сохранён</span>{% else %}<span class="badge err">не задан</span>{% endif %}
+        </label>
+        <input type="password" name="pachca_bot_token" placeholder="токен бота (пусто = оставить как есть)">
+      </div>
+      <div class="field">
+        <label>Signing secret (проверка webhook)
+          {% if s.pachca_webhook_secret__is_set %}<span class="badge ok">сохранён</span>{% else %}<span class="badge err">не задан</span>{% endif %}
+        </label>
+        <input type="password" name="pachca_webhook_secret" placeholder="signing secret (пусто = оставить как есть)">
+      </div>
+      <div class="field">
+        <label>Реакция-индикатор «агент думает» (необязательно)</label>
+        <input type="text" name="reaction_indicator" value="{{ s.reaction_indicator }}" placeholder="agent-thinking">
+      </div>
+
+      <hr>
+
+      <label class="switch">
+        <input type="checkbox" name="pachca_thread_context" {% if s.pachca_thread_context %}checked{% endif %}>
+        <span class="track"></span>
+        <span class="lbl">Помнить контекст в тредах
+          <small>Бот держит в уме исходный вопрос треда и предыдущие сообщения.</small></span>
+      </label>
+      <label class="switch">
+        <input type="checkbox" name="pachca_thread_replies" {% if s.pachca_thread_replies %}checked{% endif %}>
+        <span class="track"></span>
+        <span class="lbl">Отвечать тредом на новые вопросы
+          <small>Выкл (по умолчанию) — как раньше: ответ прямо в чат репликой на сообщение.
+          Вкл — на каждый новый вопрос вне треда бот создаёт тред и отвечает в нём;
+          дальнейшая переписка идёт в этом треде (с памятью, если включено «Помнить контекст в тредах» выше).</small></span>
+      </label>
+      <label class="switch">
+        <input type="checkbox" name="pachca_native_images" {% if s.pachca_native_images %}checked{% endif %}>
+        <span class="track"></span>
+        <span class="lbl">Картинки — настоящим вложением
+          <small>Вкл (по умолчанию) — картинки из ответа (свои, из ZIP-импорта) загружаются в
+          Пачку и приходят как настоящее изображение, а не текстовая ссылка. Если для
+          конкретной картинки загрузка не удалась — просто останется ссылка, как раньше.</small></span>
+      </label>
+      <label class="switch">
+        <input type="checkbox" name="pachca_ask_rating" {% if s.pachca_ask_rating %}checked{% endif %}>
+        <span class="track"></span>
+        <span class="lbl">Просить оценить ответ (1-10)
+          <small>Вкл (по умолчанию) — после ответа в треде бот просит оценить его числом
+          от 1 до 10 (сотрудник просто отвечает числом в тот же тред). Оценки и то, кто
+          чаще всего спрашивает — на странице «Метрики».</small></span>
+      </label>
+      <label class="switch">
+        <input type="checkbox" name="verify_ip" {% if s.pachca_verify_ip %}checked{% endif %}>
+        <span class="track"></span>
+        <span class="lbl">Проверять IP отправителя webhook
+          <small>Дополнительная защита: принимать вебхуки только с адреса Пачки.</small></span>
+      </label>
+
+      <div class="field">
+        <label>Разрешённый IP Пачки</label>
+        <input type="text" name="pachca_allowed_ip" value="{{ s.pachca_allowed_ip }}">
+      </div>
+      <div class="field">
+        <label>Базовый URL API Пачки</label>
+        <input type="text" name="pachca_api_url" value="{{ s.pachca_api_url }}">
+      </div>
+    </div>
+  </div>
+
+  <!-- ---------- Omnidesk ---------- -->
+  <div class="pane" data-p="omni">
+    <div class="card">
+      <h2>Omnidesk (служба поддержки)</h2>
+      <p class="desc">Бот отвечает на обращения клиентов. Вебхук настраивается в Omnidesk в разделе «Правила».</p>
+      <div class="field">
+        <label>Поддомен (без .omnidesk.ru)</label>
+        <input type="text" name="omnidesk_domain" value="{{ s.omnidesk_domain }}" placeholder="например: mycompany">
+      </div>
+      <div class="field">
+        <label>Email сотрудника для API</label>
+        <input type="text" name="omnidesk_staff_email" value="{{ s.omnidesk_staff_email }}" placeholder="bot@mycompany.ru">
+      </div>
+      <div class="field">
+        <label>API-ключ Omnidesk
+          {% if s.omnidesk_api_key__is_set %}<span class="badge ok">сохранён</span>{% else %}<span class="badge err">не задан</span>{% endif %}
+        </label>
+        <input type="password" name="omnidesk_api_key" placeholder="API-ключ (пусто = оставить как есть)">
+      </div>
+      <div class="field">
+        <label>Токен вебхука (общий секрет)
+          {% if s.omnidesk_webhook_token__is_set %}<span class="badge ok">сохранён</span>{% else %}<span class="badge err">не задан</span>{% endif %}
+        </label>
+        <input type="password" name="omnidesk_webhook_token" placeholder="придумайте секрет (пусто = оставить как есть)">
+      </div>
+      <div class="field">
+        <label>ID сотрудника-бота (необязательно)</label>
+        <input type="text" name="omnidesk_staff_id" value="{{ s.omnidesk_staff_id }}" placeholder="если пусто — берётся сотрудник из email выше">
+      </div>
+      <label class="switch">
+        <input type="checkbox" name="omnidesk_reply_as_note" {% if s.omnidesk_reply_as_note %}checked{% endif %}>
+        <span class="track"></span>
+        <span class="lbl">Отвечать внутренней заметкой
+          <small>Сотрудник проверит ответ перед отправкой клиенту.</small></span>
+      </label>
+    </div>
+  </div>
+
+  <div class="row" style="position:sticky; bottom:0; padding:14px 0; background:linear-gradient(transparent, var(--bg) 35%)">
+    <button type="submit">Сохранить настройки</button>
+    <span class="faint">Изменения применяются сразу, перезапуск не нужен.</span>
+  </div>
+</form>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Вкладки
+  document.querySelectorAll('#tabs button').forEach(function(b){
+    b.addEventListener('click', function(){
+      document.querySelectorAll('#tabs button').forEach(function(x){ x.classList.toggle('active', x === b); });
+      document.querySelectorAll('.pane').forEach(function(p){ p.classList.toggle('active', p.dataset.p === b.dataset.p); });
+      try{ localStorage.setItem('kb-settings-tab', b.dataset.p); }catch(e){}
+    });
+  });
+  try{
+    var t = localStorage.getItem('kb-settings-tab');
+    if(t){ var btn = document.querySelector('#tabs button[data-p="' + t + '"]'); if(btn) btn.click(); }
+  }catch(e){}
+
+  // Провайдер
+  function kbSyncProvider(){
+    var val = (document.querySelector('input[name=llm_provider]:checked') || {}).value;
+    document.querySelectorAll('.prov').forEach(function(p){ p.classList.toggle('active', p.dataset.prov === val); });
+    document.querySelectorAll('.prov-fields').forEach(function(f){ f.style.display = (f.dataset.for === val) ? '' : 'none'; });
+  }
+  document.querySelectorAll('input[name=llm_provider]').forEach(function(r){ r.addEventListener('change', kbSyncProvider); });
+  kbSyncProvider();
+
+  // Обновление сертификата GigaChat
+  (function(){
+    var btn = document.getElementById('gigachatCertBtn');
+    if(!btn) return;
+    btn.addEventListener('click', function(){
+      var orig = btn.textContent;
+      btn.disabled = true; btn.textContent = 'Обновляю…';
+      fetch('/admin/gigachat/update_cert', {method: 'POST'})
+        .then(function(r){ return r.json(); })
+        .then(function(data){
+          if(data.ok){ location.reload(); }
+          else {
+            alert('Не удалось обновить сертификат: ' + (data.error || 'неизвестная ошибка'));
+            btn.disabled = false; btn.textContent = orig;
+          }
+        })
+        .catch(function(e){
+          alert('Ошибка запроса: ' + e);
+          btn.disabled = false; btn.textContent = orig;
+        });
+    });
+  })();
+
+  // Приоритет — пресеты
+  (function(){
+    var seg = document.getElementById('prioSeg'), val = document.getElementById('prioVal');
+    if(!seg || !val) return;
+    var btns = [].slice.call(seg.querySelectorAll('button'));
+    btns.forEach(function(b){
+      b.addEventListener('click', function(){
+        val.value = b.dataset.v;
+        btns.forEach(function(x){ x.classList.toggle('active', x === b); });
+      });
+    });
+    var cur = parseFloat(val.value || '0'), best = btns[0], bestd = 1e9;
+    btns.forEach(function(b){ var d = Math.abs(parseFloat(b.dataset.v) - cur); if(d < bestd){ bestd = d; best = b; } });
+    best.classList.add('active');
+  })();
+
+  // Режим ответа на агрегационные вопросы
+  (function(){
+    var seg = document.getElementById('searchModeSeg'), val = document.getElementById('searchModeVal');
+    if(!seg || !val) return;
+    var btns = [].slice.call(seg.querySelectorAll('button'));
+    btns.forEach(function(b){
+      b.addEventListener('click', function(){
+        val.value = b.dataset.v;
+        btns.forEach(function(x){ x.classList.toggle('active', x === b); });
+      });
+    });
+    var cur = val.value || 'auto';
+    var active = btns.filter(function(b){ return b.dataset.v === cur; })[0] || btns[0];
+    active.classList.add('active');
+  })();
+
+  // Пресеты правил
+  (function(){
+    var seg = document.getElementById('rulesSeg'), ta = document.getElementById('rulesText');
+    if(!seg || !ta) return;
+    var PRESETS = {
+      strict:
+"Работа с источниками:\n"+
+"- Отвечай ТОЛЬКО на основе приведённых ниже выдержек из базы знаний.\n"+
+"- Если прямого ответа в выдержках нет — честно скажи, что информации в базе знаний нет, и предложи уточнить вопрос или обратиться к коллеге. Ничего не домысливай и не предполагай.\n"+
+"- Не приводи конкретные детали (названия пунктов меню, настройки, цены, сроки), которых нет в выдержках.\n"+
+"- Указывай, из какого файла взята информация.",
+      hybrid:
+"Работа с источниками:\n"+
+"- Выдержки из базы знаний ниже — приоритетный источник. Сверяйся с ними в первую очередь и указывай файл-источник, когда берёшь данные оттуда.\n"+
+"- Если в базе есть ответ — отвечай по нему.\n"+
+"- Если прямого ответа в базе нет — можешь рассуждать и предлагать решения на основе своих профессиональных знаний, помечая это как своё экспертное предложение, а не факт из базы.\n"+
+"- Не выдумывай конкретные детали продукта (точные названия пунктов меню, настроек, цены), которых нет в базе — предложи их проверить."
+    };
+    seg.querySelectorAll('button').forEach(function(b){
+      b.addEventListener('click', function(){
+        ta.value = PRESETS[b.dataset.mode];
+        seg.querySelectorAll('button').forEach(function(x){ x.classList.toggle('active', x === b); });
+      });
+    });
+    var cur = (ta.value || '').toLowerCase();
+    var isStrict = cur.indexOf('только на основе') !== -1 && cur.indexOf('не домысливай') !== -1;
+    var btn = seg.querySelector('button[data-mode="' + (isStrict ? 'strict' : 'hybrid') + '"]');
+    if(btn) btn.classList.add('active');
+  })();
+</script>
+{% endblock %}
