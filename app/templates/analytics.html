@@ -8,6 +8,15 @@
   дополнить в базе знаний. Темы определяются автоматически той же моделью, что отвечает агенту —
   по кнопке ниже, не в реальном времени на каждый вопрос.</p>
 
+{% if resolved_count %}
+<div class="alert ok" style="margin-bottom:14px">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6L9 17l-5-5"/></svg>
+  <div class="txt"><b>«{{ resolved_topic }}»:</b> {{ resolved_count }} ответ(ов) без источников помечено
+    исправленными — из счётчика «Без источников» они убраны. Если по этой теме снова ответят без опоры
+    на базу, тема опять появится в пробелах (это новые случаи, не старые).</div>
+</div>
+{% endif %}
+
 <div style="margin:-6px 0 18px">
   <a class="btn" href="/admin/export.xlsx">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 3v12m0 0-4-4m4 4 4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
@@ -45,6 +54,7 @@
         <th style="text-align:right">Вопросов</th>
         <th style="text-align:right">Без источников</th>
         <th style="text-align:right">Средняя оценка</th>
+        <th></th>
       </tr>
     </thead>
     <tbody>
@@ -56,6 +66,14 @@
         <td style="text-align:right">
           {% if t.avg_rating is none %}<span class="faint">—</span>
           {% else %}<span class="badge {% if t.avg_rating >= 8 %}ok{% elif t.avg_rating >= 5 %}warn{% else %}err{% endif %}">{{ t.avg_rating }}/10</span>{% endif %}
+        </td>
+        <td style="text-align:right">
+          <form method="post" action="/admin/analytics/topic/{{ t.topic | urlencode }}/resolve"
+                style="display:inline" onsubmit="return confirm('Пометить {{ t.no_sources }} ответ(ов) по теме «{{ t.topic }}» исправленными?');">
+            <button class="ghost sm" type="submit" title="Я дополнил базу — эти старые ответы больше не пробел">
+              ✓ Исправлено
+            </button>
+          </form>
         </td>
       </tr>
       {% endfor %}

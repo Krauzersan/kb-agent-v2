@@ -19,7 +19,23 @@
       {% if e.rating is not none %}
         <span class="badge {% if e.rating >= 8 %}ok{% elif e.rating >= 5 %}warn{% else %}err{% endif %}">оценка: {{ e.rating }}/10</span>
       {% endif %}
-      {% if not e.sources %}<span class="badge err">без источников</span>{% endif %}
+      {% if not e.sources %}
+        {% if e.resolved %}
+          <span class="badge ok">пробел исправлен</span>
+          <form method="post" action="/admin/analytics/entry/{{ e.id }}/resolve" style="display:inline">
+            <input type="hidden" name="topic_name" value="{{ topic_name }}">
+            <input type="hidden" name="resolved" value="0">
+            <button class="ghost sm" type="submit" title="Снять пометку — снова считать пробелом">Отменить</button>
+          </form>
+        {% else %}
+          <span class="badge err">без источников</span>
+          <form method="post" action="/admin/analytics/entry/{{ e.id }}/resolve" style="display:inline">
+            <input type="hidden" name="topic_name" value="{{ topic_name }}">
+            <input type="hidden" name="resolved" value="1">
+            <button class="ghost sm" type="submit" title="Я дополнил базу — этот ответ больше не пробел">✓ Исправлено</button>
+          </form>
+        {% endif %}
+      {% endif %}
     </div>
   </div>
 

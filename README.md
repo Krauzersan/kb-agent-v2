@@ -58,7 +58,7 @@ Telegram and WhatsApp are newer here, so they're still a bit more basic: plain t
 **Doesn't need much babysitting**
 - Password-protected admin panel with its own session — doesn't piggyback on any other login.
 - Keys and tokens are stored encrypted in the app's own settings store, not sitting around in a config file in plain text.
-- Built-in analytics — what people are actually asking, grouped by topic, plus a per-user view if you need to dig into one weird conversation.
+- Built-in analytics — what people are actually asking, grouped by topic, plus a per-user view if you need to dig into one weird conversation. Topics the agent answered with nothing from the knowledge base show up as flagged "gaps" — fix the base and mark the gap resolved with one click; it only comes back if the same topic goes unanswered again.
 - One-click Excel report (`.xlsx`, formatted and filterable) — an overview with a rolling 7-day digest baked right in, a sheet of flagged problem answers (low-rated or answered with nothing from the knowledge base), and the full question log, all in one file for whoever likes spreadsheets more than dashboards.
 - Logs, disk usage, cleanup tools, and a "just wipe everything" switch for when a test environment needs a fresh start.
 
@@ -227,7 +227,7 @@ Telegram и WhatsApp тут новенькие, поэтому пока попр
 **Не требует особого присмотра**
 - Админ-панель с паролем и своей сессией — ни от кого чужого логина не зависит.
 - Ключи и токены хранятся зашифрованными в собственном хранилище настроек, а не валяются в конфиге открытым текстом.
-- Встроенная аналитика — что реально спрашивают, с группировкой по темам, плюс разбор по конкретному пользователю, если нужно понять один странный диалог.
+- Встроенная аналитика — что реально спрашивают, с группировкой по темам, плюс разбор по конкретному пользователю, если нужно понять один странный диалог. Темы, на которые агент ответил вообще без опоры на базу, помечаются как «пробел» — дополнили базу, отметили пробел исправленным одним кликом; появится снова, только если по этой теме опять ответят без источника.
 - Excel-отчёт в один клик (`.xlsx`, с форматированием и фильтрами) — обзор со встроенным дайджестом за последние 7 дней, лист с проблемными ответами (низкая оценка или ответ вообще без опоры на базу) и полный лог вопросов, одним файлом для тех, кому таблицы понятнее дашбордов.
 - Логи, место на диске, очистка, и кнопка «стереть всё» для тестовых окружений, которым нужен чистый старт.
 

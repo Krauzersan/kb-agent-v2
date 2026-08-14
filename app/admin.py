@@ -296,7 +296,7 @@ def metrics_user_page(request: Request, asker_user_id: int):
 # ---------- аналитика: о чём чаще всего спрашивают, чего не хватает в базе ----------
 
 @router.get("/admin/analytics", response_class=HTMLResponse)
-def analytics_page(request: Request):
+def analytics_page(request: Request, resolved: int = 0, topic: str = ""):
     auth.require_login(request)
     ctx = _base_ctx(request)
     stats = db.topic_stats()
@@ -307,6 +307,7 @@ def analytics_page(request: Request):
     ctx.update({
         "topics": stats, "gaps": gaps,
         "untagged": db.count_untagged(),
+        "resolved_count": resolved, "resolved_topic": topic,
     })
     return templates.TemplateResponse("analytics.html", ctx)
 
@@ -317,6 +318,32 @@ def analytics_topic_page(request: Request, topic_name: str):
     ctx = _base_ctx(request)
     ctx.update({"topic_name": topic_name, "entries": db.topic_examples(topic_name)})
     return templates.TemplateResponse("analytics_topic.html", ctx)
+
+
+@router.post("/admin/analytics/topic/{topic_name}/resolve")
+def analytics_topic_resolve(request: Request, topic_name: str):
+    """«Пометить исправленным» на странице аналитики: все текущие безысточниковые
+    ответы этой темы больше не считаются открытым пробелом (см. db.resolve_topic_gaps).
+    Ничего не удаляется — вопросы/ответы/оценки остаются в логе как были."""
+    auth.require_login(request)
+    n = db.resolve_topic_gaps(topic_name)
+    return RedirectResponse(
+        f"/admin/analytics?resolved={n}&topic={urllib.parse.quote(topic_name)}",
+        status_code=HTTP_303_SEE_OTHER,
+    )
+
+
+@router.post("/admin/analytics/entry/{query_id}/resolve")
+def analytics_entry_resolve(request: Request, query_id: int,
+                            topic_name: str = Form(...), resolved: str = Form("1")):
+    """Точечная пометка одного ответа со страницы темы — не удаляет запись, просто
+    убирает/возвращает флаг «пробел», resolved=0 — чтобы можно было отменить."""
+    auth.require_login(request)
+    db.set_resolved(query_id, resolved == "1")
+    return RedirectResponse(
+        f"/admin/analytics/topic/{urllib.parse.quote(topic_name)}",
+        status_code=HTTP_303_SEE_OTHER,
+    )
 
 
 @router.get("/admin/export.xlsx")

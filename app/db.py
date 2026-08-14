@@ -94,6 +94,14 @@ def init_db() -> None:
             con.execute("ALTER TABLE query_log ADD COLUMN rating INTEGER")
         if "topic" not in cols:
             con.execute("ALTER TABLE query_log ADD COLUMN topic TEXT")
+        # Пометка «пробел исправлен» (страница «Аналитика» → «Пробелы в базе знаний»):
+        # админ добавил недостающую информацию в базу, и старые ответы «без источников»
+        # по этой теме больше не должны считаться открытой проблемой. Если тема снова
+        # начнёт отвечаться без источников — это уже НОВЫЕ строки с resolved=0, пробел
+        # закономерно всплывёт опять (не разовое отключение проверки, а именно квитанция
+        # по конкретным старым ответам).
+        if "resolved" not in cols:
+            con.execute("ALTER TABLE query_log ADD COLUMN resolved INTEGER NOT NULL DEFAULT 0")
 
         # Именные аккаунты админки (email + пароль) — в дополнение к общему паролю
         # (ADMIN_PASSWORD в .env), который продолжает работать как раньше.
@@ -464,14 +472,17 @@ def query_rows_by_ids(ids: list) -> list:
 def topic_stats() -> list:
     """[{topic, questions, rated, avg_rating, no_sources}] — для страницы аналитики.
     no_sources — сколько вопросов темы agent ответил вообще без опоры на базу (пустые
-    источники): сильный сигнал, что тему стоит добавить/расширить в базе знаний,
-    надёжнее низкой оценки (там ответ мог быть просто неточным, а не отсутствующим)."""
+    источники) И ЕЩЁ НЕ ПОМЕЧЕНЫ ИСПРАВЛЕННЫМИ: сильный сигнал, что тему стоит
+    добавить/расширить в базе знаний, надёжнее низкой оценки (там ответ мог быть
+    просто неточным, а не отсутствующим). Если админ пометил пробел исправленным
+    (resolve_topic_gaps), эти старые строки в счётчик уже не попадают — но новый
+    безысточниковый ответ по той же теме снова его поднимет."""
     with _lock, _conn() as con:
         rows = con.execute(
             "SELECT topic, COUNT(*) AS questions, COUNT(rating) AS rated, "
             "AVG(rating) AS avg_rating, "
-            "SUM(CASE WHEN sources IS NULL OR sources = '' OR sources = '[]' "
-            "THEN 1 ELSE 0 END) AS no_sources "
+            "SUM(CASE WHEN (sources IS NULL OR sources = '' OR sources = '[]') "
+            "AND resolved = 0 THEN 1 ELSE 0 END) AS no_sources "
             "FROM query_log WHERE topic IS NOT NULL AND topic != '' "
             "GROUP BY topic ORDER BY questions DESC"
         ).fetchall()
@@ -483,10 +494,34 @@ def topic_stats() -> list:
     return out
 
 
+def resolve_topic_gaps(topic: str) -> int:
+    """Помечает ВСЕ текущие безысточниковые ответы этой темы как исправленные —
+    кнопка «Пометить исправленным» на странице аналитики. Возвращает, сколько
+    строк реально пометил (0, если пробела уже и так не было)."""
+    with _lock, _conn() as con:
+        cur = con.execute(
+            "UPDATE query_log SET resolved = 1 WHERE topic = ? AND resolved = 0 "
+            "AND (sources IS NULL OR sources = '' OR sources = '[]')",
+            (topic,),
+        )
+        return cur.rowcount
+
+
+def set_resolved(query_id: int, resolved: bool) -> None:
+    """Точечная пометка/снятие пометки одного ответа — со страницы темы, когда
+    нужно исправить не всю тему целиком, а конкретный случай."""
+    with _lock, _conn() as con:
+        con.execute(
+            "UPDATE query_log SET resolved = ? WHERE id = ?",
+            (1 if resolved else 0, query_id),
+        )
+
+
 def topic_examples(topic: str, limit: int = 12) -> list:
     with _lock, _conn() as con:
         rows = con.execute(
-            "SELECT id, created_at, channel, question, answer, rating, asker_name, sources "
+            "SELECT id, created_at, channel, question, answer, rating, asker_name, "
+            "sources, resolved "
             "FROM query_log WHERE topic = ? ORDER BY id DESC LIMIT ?", (topic, limit)
         ).fetchall()
     out = []

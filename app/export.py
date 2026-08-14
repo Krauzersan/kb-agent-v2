@@ -46,7 +46,7 @@ def _rating_fill(rating) -> PatternFill:
 
 def _problem_reason(row: dict) -> str:
     reasons = []
-    if not row.get("sources"):
+    if not row.get("sources") and not row.get("resolved"):
         reasons.append("нет источников в базе")
     rating = row.get("rating")
     if rating is not None and rating <= _LOW_RATING_MAX:
@@ -55,8 +55,12 @@ def _problem_reason(row: dict) -> str:
 
 
 def _is_problem(row: dict) -> bool:
+    """«Без источников» перестаёт считаться проблемой, если админ пометил его
+    исправленным на странице «Аналитика» (пробел устранён, старый случай — не новый).
+    Низкая оценка resolved не касается — это отдельный сигнал, не про пробел в базе."""
     rating = row.get("rating")
-    return (not row.get("sources")) or (rating is not None and rating <= _LOW_RATING_MAX)
+    no_sources = (not row.get("sources")) and not row.get("resolved")
+    return no_sources or (rating is not None and rating <= _LOW_RATING_MAX)
 
 
 def _week_rows(rows: list) -> list:
