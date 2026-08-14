@@ -5,7 +5,7 @@ import re
 import sqlite3
 import threading
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from config import settings
 
@@ -405,6 +405,37 @@ def rating_overview() -> dict:
     d = dict(row)
     d["avg_rating"] = round(d["avg_rating"], 1) if d["avg_rating"] is not None else None
     return d
+
+
+def rating_distribution() -> list:
+    """[{rating: 1..10, count}] — сколько раз ставили каждую оценку, для гистограммы
+    на дашборде. Только реально оценённые ответы (rating IS NOT NULL); все 10 значений
+    возвращаются всегда, даже с count=0, чтобы столбики на графике не «прыгали»."""
+    with _lock, _conn() as con:
+        rows = con.execute(
+            "SELECT rating, COUNT(*) AS count FROM query_log "
+            "WHERE rating IS NOT NULL GROUP BY rating"
+        ).fetchall()
+    counts = {int(r["rating"]): int(r["count"]) for r in rows}
+    return [{"rating": v, "count": counts.get(v, 0)} for v in range(1, 11)]
+
+
+def questions_per_day(days: int = 30) -> list:
+    """[{date: 'YYYY-MM-DD', count}] за последние `days` дней (включая сегодня),
+    по created_at, все каналы. Дни без вопросов возвращаются с count=0 — без
+    зазоров, чтобы линия на графике не «телепортировалась»."""
+    since = (datetime.now(timezone.utc) - timedelta(days=days - 1)).strftime("%Y-%m-%d")
+    with _lock, _conn() as con:
+        rows = con.execute(
+            "SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS count FROM query_log "
+            "WHERE substr(created_at, 1, 10) >= ? GROUP BY day", (since,),
+        ).fetchall()
+    counts = {r["day"]: int(r["count"]) for r in rows}
+    out = []
+    for i in range(days):
+        d = (datetime.now(timezone.utc) - timedelta(days=days - 1 - i)).strftime("%Y-%m-%d")
+        out.append({"date": d, "count": counts.get(d, 0)})
+    return out
 
 
 def list_by_asker(asker_user_id: int, limit: int = 200) -> list:

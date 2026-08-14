@@ -298,12 +298,8 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8M8 13h5"/></svg>
       Лог вопросов
     </a>
-    <a class="navlink {% if path == '/admin/metrics' %}active{% endif %}" href="/admin/metrics">
+    <a class="navlink {% if path in ('/admin/analytics', '/admin/metrics') or path.startswith('/admin/analytics/') or path.startswith('/admin/metrics/') %}active{% endif %}" href="/admin/analytics">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg>
-      Метрики
-    </a>
-    <a class="navlink {% if path == '/admin/analytics' %}active{% endif %}" href="/admin/analytics">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
       Аналитика
     </a>
 

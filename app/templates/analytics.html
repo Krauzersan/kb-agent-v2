@@ -2,20 +2,44 @@
 {% block title %}Аналитика — база знаний{% endblock %}
 {% block page_title %}Аналитика{% endblock %}
 
+{% block head_extra %}
+<style>
+  .tabs{display:flex; gap:4px; border-bottom:1px solid var(--line); margin-bottom:20px; overflow-x:auto}
+  .tabs button{
+    background:transparent; color:var(--muted); border:none; border-bottom:2px solid transparent;
+    border-radius:0; padding:10px 15px; font-size:13.6px; font-weight:540; white-space:nowrap;
+  }
+  .tabs button:hover{background:transparent; color:var(--text)}
+  .tabs button.active{color:var(--accent-text); border-bottom-color:var(--accent)}
+  .pane{display:none}
+  .pane.active{display:block}
+
+  /* Графики — минималистичные inline SVG, без JS-библиотек. Подсказки при
+     наведении/фокусе — через нативный <title>, поэтому работают без единой строчки JS. */
+  .viz-card{overflow-x:auto}
+  .viz-baseline{stroke:var(--line-2); stroke-width:1}
+  .viz-axis{fill:var(--faint); font-size:11px}
+  .viz-val{fill:var(--muted); font-size:11px; font-weight:650}
+  .viz-bar{transition:filter .1s, opacity .1s; cursor:default}
+  .viz-bar:hover, .viz-bar:focus-visible{filter:brightness(1.12)}
+  .viz-bar:focus-visible{outline:2px solid var(--accent); outline-offset:1px}
+  .viz-err{fill:var(--err)}
+  .viz-warn{fill:var(--warn)}
+  .viz-ok{fill:var(--ok)}
+  .viz-seq{fill:var(--accent)}
+  .viz-line{stroke:var(--accent); stroke-width:2; fill:none; stroke-linejoin:round; stroke-linecap:round}
+  .viz-area{fill:var(--accent); opacity:.1}
+  .viz-dot{fill:var(--accent); stroke:var(--surface); stroke-width:2; transition:r .1s}
+  .viz-dot:hover, .viz-dot:focus-visible{r:6px; outline:none}
+  .viz-tier-legend{display:flex; gap:14px; align-items:center; margin-top:10px; font-size:12px; color:var(--muted)}
+  .viz-tier-legend .dot{display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:5px; vertical-align:-1px}
+</style>
+{% endblock %}
+
 {% block content %}
 
-<p class="desc" style="margin:-6px 0 16px">О чём чаще всего спрашивают агента и какие темы стоит
-  дополнить в базе знаний. Темы определяются автоматически той же моделью, что отвечает агенту —
-  по кнопке ниже, не в реальном времени на каждый вопрос.</p>
-
-{% if resolved_count %}
-<div class="alert ok" style="margin-bottom:14px">
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6L9 17l-5-5"/></svg>
-  <div class="txt"><b>«{{ resolved_topic }}»:</b> {{ resolved_count }} ответ(ов) без источников помечено
-    исправленными — из счётчика «Без источников» они убраны. Если по этой теме снова ответят без опоры
-    на базу, тема опять появится в пробелах (это новые случаи, не старые).</div>
-</div>
-{% endif %}
+<p class="desc" style="margin:-6px 0 16px">Как оценивают ответы агента и о чём его чаще всего спрашивают —
+  включая темы, которые стоит дополнить в базе знаний.</p>
 
 <div style="margin:-6px 0 18px">
   <a class="btn" href="/admin/export.xlsx">
@@ -25,99 +49,275 @@
   <span class="hint">Обзор (с дайджестом за неделю), проблемные ответы (низкая оценка или ответ без опоры на базу) и полный лог — одним файлом.</span>
 </div>
 
-<div class="card" style="margin-bottom:18px">
-  <h2>Разметка тем</h2>
-  <p class="desc">
-    {% if untagged %}
-      <b>{{ untagged }}</b> вопрос(ов) в логе ещё без темы.
-    {% else %}
-      Все вопросы в логе уже размечены темами.
-    {% endif %}
-  </p>
-  <form method="post" action="/admin/analytics/backfill">
-    <button class="ghost" type="submit" {{ 'disabled' if not untagged else '' }}>
-      🏷 Обновить анализ ({{ untagged }})
-    </button>
-  </form>
+<div class="tabs" id="tabs">
+  <button type="button" data-p="ratings">Оценки ответов</button>
+  <button type="button" data-p="topics">Темы и пробелы</button>
 </div>
 
-{% if gaps %}
-<div class="card" style="margin-bottom:18px; border:1px solid var(--warn)">
-  <h2>Пробелы в базе знаний</h2>
-  <p class="desc">Темы, по которым агент отвечал вообще без опоры на базу (ничего релевантного не
-    нашлось) — сильный кандидат на то, что стоит добавить или расширить в базе.</p>
-  <div class="table-wrap">
-  <table>
-    <thead>
-      <tr>
-        <th>Тема</th>
-        <th style="text-align:right">Вопросов</th>
-        <th style="text-align:right">Без источников</th>
-        <th style="text-align:right">Средняя оценка</th>
-        <th></th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for t in gaps %}
-      <tr>
-        <td><a href="/admin/analytics/topic/{{ t.topic | urlencode }}">{{ t.topic }}</a></td>
-        <td style="text-align:right">{{ t.questions }}</td>
-        <td style="text-align:right"><span class="badge err">{{ t.no_sources }}</span></td>
-        <td style="text-align:right">
-          {% if t.avg_rating is none %}<span class="faint">—</span>
-          {% else %}<span class="badge {% if t.avg_rating >= 8 %}ok{% elif t.avg_rating >= 5 %}warn{% else %}err{% endif %}">{{ t.avg_rating }}/10</span>{% endif %}
-        </td>
-        <td style="text-align:right">
-          <form method="post" action="/admin/analytics/topic/{{ t.topic | urlencode }}/resolve"
-                style="display:inline" onsubmit="return confirm('Пометить {{ t.no_sources }} ответ(ов) по теме «{{ t.topic }}» исправленными?');">
-            <button class="ghost sm" type="submit" title="Я дополнил базу — эти старые ответы больше не пробел">
-              ✓ Исправлено
-            </button>
-          </form>
-        </td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<!-- ---------- Оценки ответов (бывшие «Метрики») ---------- -->
+<div class="pane" data-p="ratings">
+
+  <p class="desc" style="margin:-4px 0 16px">Кто чаще всего спрашивает агента в Пачке и как оценивает его
+    ответы. После каждого ответа в треде бот просит поставить оценку от 1 до 10 — сотрудник просто отвечает
+    числом. Включить/выключить — в <a href="/admin/settings#pachca">настройках Пачки</a>.</p>
+
+  <div class="grid c3" style="margin-bottom:18px">
+    <div class="stat">
+      <div class="k">Вопросов в тредах</div>
+      <div class="v">{{ overview.questions }}</div>
+      <div class="s">всего за всё время</div>
+    </div>
+    <div class="stat">
+      <div class="k">Оценено</div>
+      <div class="v">{{ overview.rated }}</div>
+      <div class="s">{% if overview.questions %}{{ (100 * overview.rated / overview.questions) | round | int }}% от всех вопросов{% else %}пока нет данных{% endif %}</div>
+    </div>
+    <div class="stat">
+      <div class="k">Средняя оценка</div>
+      <div class="v" style="{% if overview.avg_rating is none %}color:var(--muted){% elif overview.avg_rating >= 8 %}color:var(--ok){% elif overview.avg_rating >= 5 %}color:var(--warn){% else %}color:var(--err){% endif %}">
+        {{ overview.avg_rating if overview.avg_rating is not none else '—' }}{% if overview.avg_rating is not none %}<span style="font-size:14px;color:var(--faint)">/10</span>{% endif %}
+      </div>
+      <div class="s">по оценённым ответам</div>
+    </div>
   </div>
-</div>
-{% endif %}
 
-{% if topics %}
-<div class="card">
-  <h2>Все темы</h2>
-  <div class="table-wrap">
-  <table>
-    <thead>
-      <tr>
-        <th>Тема</th>
-        <th style="text-align:right">Вопросов</th>
-        <th style="text-align:right">Оценено</th>
-        <th style="text-align:right">Средняя оценка</th>
-        <th style="text-align:right">Без источников</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for t in topics %}
-      <tr>
-        <td><a href="/admin/analytics/topic/{{ t.topic | urlencode }}">{{ t.topic }}</a></td>
-        <td style="text-align:right">{{ t.questions }}</td>
-        <td style="text-align:right">{{ t.rated }}</td>
-        <td style="text-align:right">
-          {% if t.avg_rating is none %}<span class="faint">—</span>
-          {% else %}<span class="badge {% if t.avg_rating >= 8 %}ok{% elif t.avg_rating >= 5 %}warn{% else %}err{% endif %}">{{ t.avg_rating }}/10</span>{% endif %}
-        </td>
-        <td style="text-align:right">{% if t.no_sources %}<span class="badge warn">{{ t.no_sources }}</span>{% else %}<span class="faint">0</span>{% endif %}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+  <div class="grid c2" style="margin-bottom:18px; align-items:stretch">
+    <div class="card viz-card">
+      <h2>Оценки по значению</h2>
+      <p class="desc">Сколько раз поставили каждую оценку (только оценённые ответы).</p>
+      {% if hist.max_count %}
+        <svg viewBox="0 0 {{ hist.width }} {{ hist.height + 20 }}" style="width:100%; max-width:420px; height:auto" role="img" aria-label="Распределение оценок от 1 до 10">
+          <line x1="0" y1="{{ hist.height }}" x2="{{ hist.width }}" y2="{{ hist.height }}" class="viz-baseline"/>
+          {% for b in hist.bars %}
+            {% if b.path %}
+              <path class="viz-bar viz-{{ b.tier }}" d="{{ b.path }}" tabindex="0"><title>Оценка {{ b.rating }}: {{ b.count }}</title></path>
+              <text x="{{ b.label_x }}" y="{{ b.label_y }}" text-anchor="middle" class="viz-val">{{ b.count }}</text>
+            {% endif %}
+            <text x="{{ b.label_x }}" y="{{ hist.height + 15 }}" text-anchor="middle" class="viz-axis">{{ b.rating }}</text>
+          {% endfor %}
+        </svg>
+        <div class="viz-tier-legend">
+          <span><span class="dot" style="background:var(--err)"></span>1–5</span>
+          <span><span class="dot" style="background:var(--warn)"></span>6–7</span>
+          <span><span class="dot" style="background:var(--ok)"></span>8–10</span>
+        </div>
+      {% else %}
+        <div class="empty"><div class="ico">📊</div>Пока нет оценённых ответов.</div>
+      {% endif %}
+    </div>
+
+    <div class="card viz-card">
+      <h2>Вопросы по дням</h2>
+      <p class="desc">Обращения к агенту за последние 30 дней, по всем каналам.</p>
+      {% if trend.max_count %}
+        <svg viewBox="0 0 {{ trend.width }} {{ trend.height + 18 }}" style="width:100%; height:auto" role="img" aria-label="Вопросы по дням за последние 30 дней">
+          <line x1="0" y1="{{ trend.height }}" x2="{{ trend.width }}" y2="{{ trend.height }}" class="viz-baseline"/>
+          <path d="{{ trend.area_d }}" class="viz-area"/>
+          <path d="{{ trend.line_d }}" class="viz-line"/>
+          {% for p in trend.points %}
+            <circle cx="{{ p.x }}" cy="{{ p.y }}" r="3" class="viz-dot" tabindex="0"><title>{{ p.date }}: {{ p.count }}</title></circle>
+          {% endfor %}
+          {% for t in trend.ticks %}
+            <text x="{{ t.x }}" y="{{ trend.height + 15 }}" text-anchor="{{ t.anchor }}" class="viz-axis">{{ t.date[5:] }}</text>
+          {% endfor %}
+        </svg>
+      {% else %}
+        <div class="empty"><div class="ico">📈</div>Пока нет данных за этот период.</div>
+      {% endif %}
+    </div>
   </div>
-</div>
-{% else %}
-<div class="card"><div class="empty"><div class="ico">📊</div>
-  Пока нет ни одной размеченной темы — нажмите «Обновить анализ» выше.
-</div></div>
-{% endif %}
 
+  {% if users %}
+    <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Сотрудник</th>
+          <th style="text-align:right">Вопросов</th>
+          <th style="text-align:right">Оценено</th>
+          <th style="text-align:right">Средняя оценка</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for u in users %}
+        <tr>
+          <td>
+            {% if u.asker_user_id %}
+              <a href="/admin/metrics/user/{{ u.asker_user_id }}">{{ u.asker_name }}</a>
+            {% else %}
+              {{ u.asker_name }}
+            {% endif %}
+          </td>
+          <td style="text-align:right">{{ u.questions }}</td>
+          <td style="text-align:right">{{ u.rated }}</td>
+          <td style="text-align:right">
+            {% if u.avg_rating is none %}
+              <span class="faint">—</span>
+            {% else %}
+              <span class="badge {% if u.avg_rating >= 8 %}ok{% elif u.avg_rating >= 5 %}warn{% else %}err{% endif %}">{{ u.avg_rating }}/10</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  {% else %}
+  <div class="card"><div class="empty"><div class="ico">📊</div>
+    Пока нет ни одного вопроса, заданного в треде Пачки.
+  </div></div>
+  {% endif %}
+
+</div>
+
+<!-- ---------- Темы и пробелы (бывшая «Аналитика») ---------- -->
+<div class="pane" data-p="topics">
+
+  {% if resolved_count %}
+  <div class="alert ok" style="margin-bottom:14px">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6L9 17l-5-5"/></svg>
+    <div class="txt"><b>«{{ resolved_topic }}»:</b> {{ resolved_count }} ответ(ов) без источников помечено
+      исправленными — из счётчика «Без источников» они убраны. Если по этой теме снова ответят без опоры
+      на базу, тема опять появится в пробелах (это новые случаи, не старые).</div>
+  </div>
+  {% endif %}
+
+  <p class="desc" style="margin:-4px 0 16px">О чём чаще всего спрашивают агента и какие темы стоит дополнить
+    в базе знаний. Темы определяются автоматически той же моделью, что отвечает агенту — по кнопке ниже,
+    не в реальном времени на каждый вопрос.</p>
+
+  <div class="card" style="margin-bottom:18px">
+    <h2>Разметка тем</h2>
+    <p class="desc">
+      {% if untagged %}
+        <b>{{ untagged }}</b> вопрос(ов) в логе ещё без темы.
+      {% else %}
+        Все вопросы в логе уже размечены темами.
+      {% endif %}
+    </p>
+    <form method="post" action="/admin/analytics/backfill">
+      <button class="ghost" type="submit" {{ 'disabled' if not untagged else '' }}>
+        🏷 Обновить анализ ({{ untagged }})
+      </button>
+    </form>
+  </div>
+
+  {% if topic_chart.bars %}
+  <div class="card viz-card" style="margin-bottom:18px">
+    <h2>Топ тем по количеству вопросов</h2>
+    <svg viewBox="0 0 {{ topic_chart.width }} {{ topic_chart.height }}" style="width:100%; max-width:560px; height:auto" role="img" aria-label="Топ тем по количеству вопросов">
+      {% for b in topic_chart.bars %}
+        <text x="0" y="{{ b.label_y }}" class="viz-axis" style="font-size:12px">{{ b.topic }}</text>
+        <path class="viz-bar viz-seq" d="{{ b.path }}" tabindex="0"><title>{{ b.topic }}: {{ b.questions }}</title></path>
+        <text x="{{ b.value_x }}" y="{{ b.value_y }}" class="viz-val">{{ b.questions }}</text>
+      {% endfor %}
+    </svg>
+  </div>
+  {% endif %}
+
+  {% if gaps %}
+  <div class="card" style="margin-bottom:18px; border:1px solid var(--warn)">
+    <h2>Пробелы в базе знаний</h2>
+    <p class="desc">Темы, по которым агент отвечал вообще без опоры на базу (ничего релевантного не
+      нашлось) — сильный кандидат на то, что стоит добавить или расширить в базе.</p>
+    <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Тема</th>
+          <th style="text-align:right">Вопросов</th>
+          <th style="text-align:right">Без источников</th>
+          <th style="text-align:right">Средняя оценка</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in gaps %}
+        <tr>
+          <td><a href="/admin/analytics/topic/{{ t.topic | urlencode }}">{{ t.topic }}</a></td>
+          <td style="text-align:right">{{ t.questions }}</td>
+          <td style="text-align:right"><span class="badge err">{{ t.no_sources }}</span></td>
+          <td style="text-align:right">
+            {% if t.avg_rating is none %}<span class="faint">—</span>
+            {% else %}<span class="badge {% if t.avg_rating >= 8 %}ok{% elif t.avg_rating >= 5 %}warn{% else %}err{% endif %}">{{ t.avg_rating }}/10</span>{% endif %}
+          </td>
+          <td style="text-align:right">
+            <form method="post" action="/admin/analytics/topic/{{ t.topic | urlencode }}/resolve"
+                  style="display:inline" onsubmit="return confirm('Пометить {{ t.no_sources }} ответ(ов) по теме «{{ t.topic }}» исправленными?');">
+              <button class="ghost sm" type="submit" title="Я дополнил базу — эти старые ответы больше не пробел">
+                ✓ Исправлено
+              </button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if topics %}
+  <div class="card">
+    <h2>Все темы</h2>
+    <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Тема</th>
+          <th style="text-align:right">Вопросов</th>
+          <th style="text-align:right">Оценено</th>
+          <th style="text-align:right">Средняя оценка</th>
+          <th style="text-align:right">Без источников</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in topics %}
+        <tr>
+          <td><a href="/admin/analytics/topic/{{ t.topic | urlencode }}">{{ t.topic }}</a></td>
+          <td style="text-align:right">{{ t.questions }}</td>
+          <td style="text-align:right">{{ t.rated }}</td>
+          <td style="text-align:right">
+            {% if t.avg_rating is none %}<span class="faint">—</span>
+            {% else %}<span class="badge {% if t.avg_rating >= 8 %}ok{% elif t.avg_rating >= 5 %}warn{% else %}err{% endif %}">{{ t.avg_rating }}/10</span>{% endif %}
+          </td>
+          <td style="text-align:right">{% if t.no_sources %}<span class="badge warn">{{ t.no_sources }}</span>{% else %}<span class="faint">0</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+  {% else %}
+  <div class="card"><div class="empty"><div class="ico">📊</div>
+    Пока нет ни одной размеченной темы — нажмите «Обновить анализ» выше.
+  </div></div>
+  {% endif %}
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.querySelectorAll('#tabs button').forEach(function(b){
+    b.addEventListener('click', function(){
+      document.querySelectorAll('#tabs button').forEach(function(x){ x.classList.toggle('active', x === b); });
+      document.querySelectorAll('.pane').forEach(function(p){ p.classList.toggle('active', p.dataset.p === b.dataset.p); });
+      try{ localStorage.setItem('kb-analytics-tab', b.dataset.p); }catch(e){}
+    });
+  });
+  (function(){
+    var initial = 'ratings';
+    {% if resolved_count %}initial = 'topics';{% endif %}
+    try{
+      if(!{{ 'true' if resolved_count else 'false' }}){
+        var stored = localStorage.getItem('kb-analytics-tab');
+        if(stored){ initial = stored; }
+      }
+    }catch(e){}
+    var btn = document.querySelector('#tabs button[data-p="' + initial + '"]');
+    if(btn){ btn.click(); }
+  })();
+</script>
 {% endblock %}

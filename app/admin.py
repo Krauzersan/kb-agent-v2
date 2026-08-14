@@ -20,6 +20,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.status import HTTP_303_SEE_OTHER
 
 import auth
+import charts
 import db
 import export
 import gigachat_client
@@ -270,11 +271,9 @@ def logs_page(request: Request, page: int = 1, q: str = ""):
 
 @router.get("/admin/metrics", response_class=HTMLResponse)
 def metrics_page(request: Request):
-    """Кто чаще всего спрашивает агента (Пачка) и как оценивает ответы (1-10)."""
-    auth.require_login(request)
-    ctx = _base_ctx(request)
-    ctx.update({"overview": db.rating_overview(), "users": db.rating_stats_by_user()})
-    return templates.TemplateResponse("metrics.html", ctx)
+    """Метрики объединены с Аналитикой в один раздел (вкладка «Оценки ответов») —
+    редирект для старых ссылок/закладок."""
+    return RedirectResponse("/admin/analytics", status_code=HTTP_303_SEE_OTHER)
 
 
 @router.get("/admin/metrics/user/{asker_user_id}", response_class=HTMLResponse)
@@ -297,6 +296,8 @@ def metrics_user_page(request: Request, asker_user_id: int):
 
 @router.get("/admin/analytics", response_class=HTMLResponse)
 def analytics_page(request: Request, resolved: int = 0, topic: str = ""):
+    """Объединённая страница «Аналитика»: оценки ответов (бывшие «Метрики») +
+    темы/пробелы — разделены вкладками на одной странице, см. analytics.html."""
     auth.require_login(request)
     ctx = _base_ctx(request)
     stats = db.topic_stats()
@@ -305,9 +306,15 @@ def analytics_page(request: Request, resolved: int = 0, topic: str = ""):
         key=lambda t: t["no_sources"], reverse=True,
     )
     ctx.update({
+        # вкладка «Темы и пробелы»
         "topics": stats, "gaps": gaps,
         "untagged": db.count_untagged(),
         "resolved_count": resolved, "resolved_topic": topic,
+        "topic_chart": charts.topic_bars(stats),
+        # вкладка «Оценки ответов»
+        "overview": db.rating_overview(), "users": db.rating_stats_by_user(),
+        "hist": charts.rating_histogram(db.rating_distribution()),
+        "trend": charts.questions_trend(db.questions_per_day(30)),
     })
     return templates.TemplateResponse("analytics.html", ctx)
 
