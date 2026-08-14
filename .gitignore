@@ -19,4 +19,5 @@ data/
 .env.backup*
 .env.pre-rotate*
 *.bak*
+*.pre-*-[0-9]*
 backup_pre_*

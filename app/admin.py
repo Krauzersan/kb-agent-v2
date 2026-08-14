@@ -739,14 +739,36 @@ def add_url(request: Request, background: BackgroundTasks, url: str = Form(...))
 
 @router.post("/admin/add_text")
 async def add_text(request: Request, background: BackgroundTasks,
-                    title: str = Form(...), text: str = Form(...)):
+                    title: str = Form(...), text: str = Form(...),
+                    images: list[UploadFile] = File(default=[])):
     """Ручной ввод текста без файла — сохраняем как обычный .md и заводим в базу тем же
-    путём, что и загруженные файлы (та же индексация, тот же список, то же удаление)."""
+    путём, что и загруженные файлы (та же индексация, тот же список, то же удаление).
+
+    Приложенные скриншоты кладём в settings.ASSETS_DIR (тем же способом, что и картинки
+    из docx/ZIP-импорта) и дописываем в конец текста маркерами [изображение] URL — их
+    подхватывает тот же конвейер, что рендерит картинки в ответах бота (см. webhook.py)."""
     auth.require_login(request)
     title = (title or "").strip()
     text = (text or "").strip()
     if not title or not text:
         return RedirectResponse("/admin?err=text", status_code=HTTP_303_SEE_OTHER)
+
+    image_markers = []
+    for img in images or []:
+        if not img or not img.filename:
+            continue
+        ext = os.path.splitext(img.filename)[1].lower()
+        if ext not in ingest.IMAGE_EXT:
+            continue
+        blob = await img.read()
+        if not blob:
+            continue
+        url = ingest.save_kb_image(blob, ext)
+        image_markers.append(f"[изображение] {url}")
+
+    if image_markers:
+        text = text + "\n\n" + "\n".join(image_markers)
+
     os.makedirs(settings.KB_DIR, exist_ok=True)
     safe = _safe_name(title if title.lower().endswith((".md", ".markdown", ".txt")) else f"{title}.md")
     stored = _new_stored_path(".md")

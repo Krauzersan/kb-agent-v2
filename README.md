@@ -34,7 +34,7 @@ One FastAPI service, one admin panel. No zoo of microservices, no extra database
 
 **Knowledge base** — the boring-but-important part
 - Upload PDFs, Word/Excel files, YAML, plain text, or images. Scans and photos of whiteboards get OCR'd automatically (Russian + English), so yes, that phone photo of the whiteboard counts too.
-- No file handy? Just paste a URL or drop in raw text.
+- No file handy? Just paste a URL or drop in raw text — and attach a few screenshots right there if the text alone doesn't tell the whole story.
 - Edit, replace, delete, bulk-select, and bump priority on the files that matter most, so the agent leans on those first.
 - Two ways to search: a quick pass over auto-generated summaries, or a slow, thorough read-through of everything when "good enough" isn't good enough.
 - Reindex all or part of it (embeddings, summaries, search index) whenever you tweak something — no need to re-upload a thing.
@@ -186,7 +186,7 @@ This is meant to run on a server you control, behind HTTPS. Set a real `ADMIN_PA
 
 **База знаний** — скучная, но важная часть
 - Загружайте PDF, Word/Excel, YAML, обычный текст или картинки. Сканы и фото досок распознаются сами через OCR (русский + английский) — да, то самое фото доски с телефона тоже сработает.
-- Нет файла под рукой — просто вставьте ссылку или кусок текста.
+- Нет файла под рукой — просто вставьте ссылку или кусок текста, и сразу же приложите пару скриншотов, если одним текстом не обойтись.
 - Редактирование, замена, удаление, массовые операции, и приоритет для важных файлов, чтобы агент в первую очередь опирался на них.
 - Два режима поиска: быстрый — по коротким автоописаниям, и медленный, дотошный — когда «примерно так» не устраивает.
 - Переиндексация целиком или частично (эмбеддинги, каталог, полнотекстовый поиск) при любых правках — без повторной загрузки файлов.

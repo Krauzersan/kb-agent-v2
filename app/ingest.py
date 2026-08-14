@@ -94,10 +94,11 @@ _DOCX_EMBED_RE = re.compile(r'r:embed="(rId\d+)"')
 _DOCX_DESCR_RE = re.compile(r'descr="([^"]*)"')
 
 
-def _save_docx_image(blob: bytes, ext: str) -> str:
-    """Кладёт картинку из docx в settings.ASSETS_DIR (та же публичная папка, что и
-    для ZIP-импорта) и возвращает публичный URL. Имя — хеш содержимого, поэтому
-    повторная переиндексация того же файла не плодит копии."""
+def save_kb_image(blob: bytes, ext: str) -> str:
+    """Кладёт картинку в settings.ASSETS_DIR (та же публичная папка, что и для
+    ZIP-импорта и docx) и возвращает публичный URL. Имя — хеш содержимого, поэтому
+    повторное сохранение той же картинки не плодит копии. Используется и здесь
+    (docx), и в admin.py — для картинок, приложенных к ручному вводу текста."""
     if ext not in IMAGE_EXT:
         ext = ".png"
     dest_rel = f"{hashlib.sha1(blob).hexdigest()[:16]}{ext}"
@@ -130,7 +131,7 @@ def _docx_paragraph_images(p, rels) -> List[str]:
             continue
         try:
             ext = os.path.splitext(rel.target_part.partname)[1].lower()
-            url = _save_docx_image(rel.target_part.blob, ext)
+            url = save_kb_image(rel.target_part.blob, ext)
         except Exception:
             log.exception("Не удалось извлечь картинку из docx (rId=%s)", rid)
             continue

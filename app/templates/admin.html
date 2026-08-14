@@ -99,8 +99,8 @@
 
   <div class="card" style="margin:0">
     <h2>Добавить текст напрямую</h2>
-    <p class="desc">Без файла — впишите заголовок и текст, агент проиндексирует как обычную статью.</p>
-    <form method="post" action="/admin/add_text">
+    <p class="desc">Без файла — впишите заголовок и текст, при желании приложите скриншоты, агент проиндексирует как обычную статью.</p>
+    <form method="post" action="/admin/add_text" enctype="multipart/form-data">
       <div class="field">
         <input type="text" name="title" placeholder="Заголовок статьи" required>
       </div>
@@ -109,6 +109,11 @@
                   style="width:100%; resize:vertical; font:inherit; padding:10px 12px;
                   border:1px solid var(--line-2); border-radius:var(--r); background:var(--surface-2);
                   color:inherit"></textarea>
+      </div>
+      <div class="field">
+        <label style="display:block; margin-bottom:4px">Скриншоты / картинки (опционально)</label>
+        <input type="file" name="images" accept="image/*" multiple>
+        <span class="hint">Добавятся в конец текста и будут доступны агенту так же, как картинки из загруженных файлов.</span>
       </div>
       <button type="submit">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>
