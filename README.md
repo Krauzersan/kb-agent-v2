@@ -45,27 +45,44 @@ One FastAPI service, one admin panel. No zoo of microservices, no extra database
 - OpenAI (GPT)
 - DeepSeek
 - GigaChat (Sber) — OAuth dance and Russian root CA included, so you don't have to fight with that yourself
+- Automatic fallback: if the provider you picked doesn't answer (no key, rate-limited, having a bad day), it quietly retries with the next provider that *does* have a key configured, instead of just showing the user an error.
 
 **Where it can chat**
 - **Pachca** — webhook in, signature checked, replies as the bot.
 - **Omnidesk** — same deal via their webhook + HTTP Basic API, picks up tickets and replies inline.
-- **Telegram** — a plain Bot API webhook. Message the bot, get an answer from the knowledge base.
-- **WhatsApp** — the official Cloud API (Meta Business Platform). Same idea: message in, answer out.
+- **Telegram** — a plain Bot API webhook. Message the bot, get an answer from the knowledge base — screenshots from the base come through as real photos, not link-dumps.
+- **WhatsApp** — the official Cloud API (Meta Business Platform). Same idea: message in, answer (and any relevant screenshot) out.
 
-Quick honesty check: Telegram and WhatsApp are the new kids here, so they're still a bit more basic — plain text only, per-chat memory but no rating collection, and no webhook signature verification yet (see [Connecting messaging channels](#connecting-messaging-channels) for what that means in practice). Tokens, though, live in the same place as everything else now — the Settings tab, no `.env` editing needed. Pachca and Omnidesk have had more time in the oven — ratings, native image replies, IP allowlisting, the works. Telegram/WhatsApp will get there too if it turns out people actually want that.
+Quick honesty check: Telegram and WhatsApp are the new kids here, so they're still a bit more basic — plain text questions only, per-chat memory but no rating collection, and no webhook signature verification yet (see [Connecting messaging channels](#connecting-messaging-channels) for what that means in practice). Pachca and Omnidesk have had more time in the oven — ratings, IP allowlisting, the works. Telegram/WhatsApp will get there too if it turns out people actually want that.
 
 **Doesn't need much babysitting**
 - Password-protected admin panel with its own session — doesn't piggyback on any other login.
 - Keys and tokens are stored encrypted in the app's own settings store, not sitting around in a config file in plain text.
 - Built-in analytics — what people are actually asking, grouped by topic, plus a per-user view if you need to dig into one weird conversation.
-- One-click Excel report (`.xlsx`, formatted and filterable) — an overview, a sheet of flagged problem answers (low-rated or answered with nothing from the knowledge base), and the full question log, all in one file for whoever likes spreadsheets more than dashboards.
+- One-click Excel report (`.xlsx`, formatted and filterable) — an overview with a rolling 7-day digest baked right in, a sheet of flagged problem answers (low-rated or answered with nothing from the knowledge base), and the full question log, all in one file for whoever likes spreadsheets more than dashboards.
 - Logs, disk usage, cleanup tools, and a "just wipe everything" switch for when a test environment needs a fresh start.
 
 ### Under the hood
 
 FastAPI, an embedded Qdrant for vector search (no extra server — just files on disk), multilingual `e5` embeddings, SQLite for metadata and full-text search, Tesseract for OCR. Nothing exotic, just parts chosen so you don't need a DevOps team to run this thing.
 
-### Quick start (Docker)
+### Quick start (Docker Compose + HTTPS)
+
+The easiest way to run this somewhere real — Caddy in front, automatic HTTPS, one command:
+
+```bash
+git clone https://github.com/Krauzersan/kb-agent-v2.git
+cd kb-agent-v2
+cp .env.example .env      # edit ADMIN_PASSWORD and DOMAIN at the very least
+
+docker compose up -d --build
+```
+
+Point `DOMAIN` in `.env` at a real domain (`kb.example.com`) pointed at this server and Caddy gets you a certificate automatically; leave it as `:80` for plain HTTP on a local/test box. The app container isn't exposed directly — everything goes through Caddy. Open `https://your-domain/` and log in with the `ADMIN_PASSWORD` you set.
+
+### Quick start (Docker, no Caddy)
+
+Prefer to handle TLS yourself, or run behind an existing reverse proxy?
 
 ```bash
 git clone https://github.com/Krauzersan/kb-agent-v2.git
@@ -81,7 +98,7 @@ docker run -d \
   kb-agent-v2
 ```
 
-Open `http://localhost:8746/` and log in with the password you set. AI provider keys and integration tokens are entered later, inside the admin panel's Settings tab — they're never stored in `.env`.
+Open `http://localhost:8746/` and log in with the password you set. Either way — AI provider keys and integration tokens are entered later, inside the admin panel's Settings tab, never in `.env`.
 
 ### Quick start (without Docker)
 
@@ -133,25 +150,30 @@ Everything in `.env` is infrastructure only — ports, storage location, the adm
 | `SESSION_SECRET` | — | Signs session cookies — generate a random value, don't reuse it |
 | `SESSION_COOKIE_NAME` | `session` | Only matters if you run more than one instance on the same domain |
 | `ENCRYPTION_KEY` | *(empty)* | Optional key to encrypt stored API keys/tokens at rest |
+| `DOMAIN` | `:80` | Docker Compose only — site address for the Caddy service (real domain = automatic HTTPS) |
 
 ### Project layout
 
 ```
 kb-agent-v2/
 ├── Dockerfile
+├── docker-compose.yml      # app + Caddy, one command, automatic HTTPS
 ├── .env.example            # infrastructure only — no API keys
 ├── deploy/
 │   └── kb-agent-v2.service # systemd unit, for a non-Docker setup
 ├── caddy/
-│   └── Caddyfile           # optional reverse-proxy example
+│   └── Caddyfile           # used by docker-compose.yml
 └── app/                    # the FastAPI service
     ├── main.py             # entrypoint
     ├── config.py           # infra settings, read from .env
     ├── settings_store.py   # API keys & tunables, entered in the admin UI
     ├── admin.py            # admin panel: upload, search, settings, analytics
+    ├── llm.py              # picks the AI provider, falls back if it doesn't answer
+    ├── img_markers.py      # shared [изображение] URL marker parsing (Telegram/WhatsApp)
     ├── webhook.py    / omnidesk_webhook.py / telegram_webhook.py / whatsapp_webhook.py  # inbound integrations
     ├── pachca.py     / omnidesk.py         / telegram_client.py  / whatsapp_client.py   # outbound integration clients
     ├── claude_client.py / openai_client.py / gigachat_client.py  # AI providers
+    ├── export.py            # Excel report (admin: /admin/export.xlsx)
     ├── rag.py / ingest.py / embeddings.py / vectorstore.py / db.py
     └── templates/           # admin UI pages
 ```
@@ -194,27 +216,44 @@ This is meant to run on a server you control, behind HTTPS. Set a real `ADMIN_PA
 - OpenAI (GPT)
 - DeepSeek
 - GigaChat (Сбер) — с их OAuth-плясками и российским корневым сертификатом уже разобрались за вас
+- Автоматический фоллбэк: если выбранный провайдер не ответил (нет ключа, упал лимит, у него просто плохой день) — агент тихо пробует следующий провайдер, у которого ключ *есть*, вместо того чтобы просто показать пользователю ошибку.
 
 **Где может общаться**
 - **Пачка** — вебхук на вход, подпись проверяется, отвечает от имени бота.
 - **Omnidesk** — та же идея через их вебхук и HTTP Basic API: подхватывает обращения, отвечает прямо в тикете.
-- **Telegram** — обычный вебхук Bot API. Написали боту — получили ответ из базы знаний.
-- **WhatsApp** — официальный Cloud API (Meta Business Platform). Та же идея: сообщение на вход, ответ на выход.
+- **Telegram** — обычный вебхук Bot API. Написали боту — получили ответ из базы знаний, а скриншоты из базы приходят настоящими фото, а не голыми ссылками.
+- **WhatsApp** — официальный Cloud API (Meta Business Platform). Та же идея: сообщение на вход, ответ (и нужный скриншот) на выход.
 
-Честно говоря: Telegram и WhatsApp тут новенькие, поэтому чуть попроще — только текст, память диалога есть, а вот сбора оценок и проверки подписи вебхука пока нет (см. [«Подключение мессенджеров»](#подключение-мессенджеров), что это значит на практике). А вот токены теперь там же, где и всё остальное — во вкладке «Настройки», редактировать `.env` не нужно. У Пачки и Omnidesk опыта побольше — оценки ответов, картинки нативным вложением, список разрешённых IP, всё как надо. Telegram/WhatsApp дотянем до того же уровня, если станет понятно, что оно того стоит.
+Честно говоря: Telegram и WhatsApp тут новенькие, поэтому чуть попроще — только текстовые вопросы, память диалога есть, а вот сбора оценок и проверки подписи вебхука пока нет (см. [«Подключение мессенджеров»](#подключение-мессенджеров), что это значит на практике). У Пачки и Omnidesk опыта побольше — оценки ответов, список разрешённых IP, всё как надо. Telegram/WhatsApp дотянем до того же уровня, если станет понятно, что оно того стоит.
 
 **Не требует особого присмотра**
 - Админ-панель с паролем и своей сессией — ни от кого чужого логина не зависит.
 - Ключи и токены хранятся зашифрованными в собственном хранилище настроек, а не валяются в конфиге открытым текстом.
 - Встроенная аналитика — что реально спрашивают, с группировкой по темам, плюс разбор по конкретному пользователю, если нужно понять один странный диалог.
-- Excel-отчёт в один клик (`.xlsx`, с форматированием и фильтрами) — обзор, лист с проблемными ответами (низкая оценка или ответ вообще без опоры на базу) и полный лог вопросов, одним файлом для тех, кому таблицы понятнее дашбордов.
+- Excel-отчёт в один клик (`.xlsx`, с форматированием и фильтрами) — обзор со встроенным дайджестом за последние 7 дней, лист с проблемными ответами (низкая оценка или ответ вообще без опоры на базу) и полный лог вопросов, одним файлом для тех, кому таблицы понятнее дашбордов.
 - Логи, место на диске, очистка, и кнопка «стереть всё» для тестовых окружений, которым нужен чистый старт.
 
 ### Технически
 
 FastAPI, встроенный Qdrant для векторного поиска (без отдельного сервера — просто файлы на диске), мультиязычные эмбеддинги `e5`, SQLite для метаданных и полнотекстового поиска, Tesseract для OCR. Ничего экзотического — стек собран так, чтобы для запуска не нужна была отдельная DevOps-команда.
 
-### Быстрый старт (Docker)
+### Быстрый старт (Docker Compose + HTTPS)
+
+Самый простой способ поднять это на реальном сервере — Caddy спереди, HTTPS сам собой, одна команда:
+
+```bash
+git clone https://github.com/Krauzersan/kb-agent-v2.git
+cd kb-agent-v2
+cp .env.example .env      # поменяйте как минимум ADMIN_PASSWORD и DOMAIN
+
+docker compose up -d --build
+```
+
+Укажите в `.env` в `DOMAIN` настоящий домен (`kb.example.com`), направленный на этот сервер, — и Caddy сам получит сертификат. Для локального/тестового запуска оставьте `:80` — будет обычный HTTP. Контейнер приложения наружу не торчит — весь трафик идёт только через Caddy. Откройте `https://ваш-домен/` и войдите по `ADMIN_PASSWORD`.
+
+### Быстрый старт (Docker, без Caddy)
+
+Хотите сами разобраться с TLS или запускаете за уже существующим реверс-прокси?
 
 ```bash
 git clone https://github.com/Krauzersan/kb-agent-v2.git
@@ -230,7 +269,7 @@ docker run -d \
   kb-agent-v2
 ```
 
-Откройте `http://localhost:8746/` и войдите по паролю, который задали. Ключи AI-провайдеров и токены интеграций вводятся позже, во вкладке «Настройки» в админке — в `.env` они никогда не хранятся.
+Откройте `http://localhost:8746/` и войдите по паролю, который задали. В обоих случаях ключи AI-провайдеров и токены интеграций вводятся позже, во вкладке «Настройки» в админке — в `.env` они не хранятся никогда.
 
 ### Быстрый старт (без Docker)
 
@@ -283,25 +322,30 @@ venv/bin/uvicorn main:app --app-dir app --host 0.0.0.0 --port 8746
 | `SESSION_SECRET` | — | Подписывает сессионные куки — сгенерируйте случайное значение |
 | `SESSION_COOKIE_NAME` | `session` | Важно только если на одном домене крутится несколько копий |
 | `ENCRYPTION_KEY` | *(пусто)* | Опциональный ключ для шифрования хранимых ключей/токенов |
+| `DOMAIN` | `:80` | Только для Docker Compose — адрес сайта для сервиса Caddy (настоящий домен = HTTPS автоматически) |
 
 ### Структура проекта
 
 ```
 kb-agent-v2/
 ├── Dockerfile
+├── docker-compose.yml      # приложение + Caddy, одна команда, HTTPS сам собой
 ├── .env.example            # только инфраструктура — без API-ключей
 ├── deploy/
 │   └── kb-agent-v2.service # systemd-юнит для запуска без Docker
 ├── caddy/
-│   └── Caddyfile           # пример конфига реверс-прокси (опционально)
+│   └── Caddyfile           # используется docker-compose.yml
 └── app/                    # сам сервис на FastAPI
     ├── main.py             # точка входа
     ├── config.py           # инфраструктурные настройки из .env
     ├── settings_store.py   # API-ключи и параметры, вводимые в админке
     ├── admin.py            # админка: загрузка, поиск, настройки, аналитика
+    ├── llm.py              # выбор AI-провайдера, фоллбэк, если тот не ответил
+    ├── img_markers.py      # общий разбор пометок [изображение] URL (Telegram/WhatsApp)
     ├── webhook.py    / omnidesk_webhook.py / telegram_webhook.py / whatsapp_webhook.py  # входящие интеграции
     ├── pachca.py     / omnidesk.py         / telegram_client.py  / whatsapp_client.py   # клиенты для ответов
     ├── claude_client.py / openai_client.py / gigachat_client.py  # AI-провайдеры
+    ├── export.py            # Excel-отчёт (админка: /admin/export.xlsx)
     ├── rag.py / ingest.py / embeddings.py / vectorstore.py / db.py
     └── templates/           # страницы админки
 ```

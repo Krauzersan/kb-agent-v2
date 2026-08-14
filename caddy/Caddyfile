@@ -1,11 +1,12 @@
-# Optional reverse proxy example — not required to run the app.
+# Used by "docker compose up" (see docker-compose.yml at the repo root) — Caddy
+# terminates HTTPS and forwards to the app container over the compose network.
 #
-# Site address comes from the DOMAIN env var:
+# Site address comes from the DOMAIN env var (set it in .env):
 #   - a real domain (kb.example.com) -> Caddy issues an HTTPS certificate automatically
 #   - ":80" -> plain HTTP, no certificate (fine for quick local tests)
 #
-# Point "reverse_proxy" at wherever the container's PORT is published, e.g.
-# "localhost:8746" if you ran the container with "-p 8746:8746".
+# Running the app container standalone instead of via compose? Point "reverse_proxy"
+# at "localhost:8746" (or wherever PORT is published) instead of "app:8746".
 {$DOMAIN} {
 	encode gzip
 
@@ -14,5 +15,5 @@
 		max_size 50MB
 	}
 
-	reverse_proxy localhost:8746
+	reverse_proxy app:8746
 }

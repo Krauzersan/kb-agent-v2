@@ -1,6 +1,8 @@
 """Приём сообщений из Telegram (Bot API webhook) и ответ через RAG.
 
-Базовый уровень: только текстовые сообщения, без inline-кнопок, без вложений.
+Базовый уровень: только текстовые сообщения на входе, без inline-кнопок. Картинки
+из базы знаний (пометки «[изображение...] URL» в ответе) отправляются нативными
+фото — Telegram сам скачивает их по прямой ссылке, заливать файл не нужно.
 Без проверки secret_token (Telegram поддерживает его при setWebhook) — добавьте,
 если этот эндпоинт будет смотреть в интернет без другой защиты (см. README).
 """
@@ -11,6 +13,7 @@ import logging
 from fastapi import APIRouter, BackgroundTasks, Request, Response
 
 import convo
+import img_markers
 import rag
 import telegram_client
 
@@ -32,9 +35,13 @@ def _handle(chat_id: int, question: str) -> None:
         result = rag.answer_question(question, history=history, channel="external",
                                      thread_key=thread_key, asker_user_id=chat_id)
         answer = result["answer"]
-        telegram_client.send_message(chat_id, answer)
+        clean_text, images = img_markers.extract_images(answer)
+        if clean_text:
+            telegram_client.send_message(chat_id, clean_text)
+        for img in images:
+            telegram_client.send_photo(chat_id, img["url"], caption=img["caption"])
         convo.append(thread_key, "user", question)
-        convo.append(thread_key, "assistant", answer)
+        convo.append(thread_key, "assistant", clean_text)
     except Exception:  # noqa: BLE001
         log.exception("Ошибка обработки Telegram-сообщения")
         telegram_client.send_message(chat_id, _ERROR_MSG)

@@ -44,3 +44,22 @@ def send_message(chat_id: int | str, text: str) -> dict | None:
     except Exception as e:  # noqa: BLE001
         log.error("Telegram sendMessage error: %s", e)
         return None
+
+
+def send_photo(chat_id: int | str, photo_url: str, caption: str = "") -> dict | None:
+    """Telegram сам скачивает картинку по ссылке — заливать файл вручную не нужно."""
+    if not configured():
+        log.warning("Telegram не настроен — токен бота не задан в настройках")
+        return None
+    payload = {"chat_id": chat_id, "photo": photo_url}
+    if caption:
+        payload["caption"] = caption[:1024]  # лимит Telegram на подпись к фото
+    try:
+        r = httpx.post(_api_url("sendPhoto"), json=payload, timeout=30)
+        if r.status_code >= 400:
+            log.error("Telegram sendPhoto %s: %s", r.status_code, r.text)
+            return None
+        return r.json()
+    except Exception as e:  # noqa: BLE001
+        log.error("Telegram sendPhoto error: %s", e)
+        return None

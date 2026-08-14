@@ -52,3 +52,25 @@ def send_message(to: str, text: str) -> dict | None:
     except Exception as e:  # noqa: BLE001
         log.error("WhatsApp send error: %s", e)
         return None
+
+
+def send_image(to: str, image_url: str, caption: str = "") -> dict | None:
+    """WhatsApp Cloud API сам скачивает картинку по ссылке (image.link) — заливать
+    файл вручную не нужно."""
+    if not configured():
+        log.warning("WhatsApp не настроен — access-токен или Phone Number ID не заданы в настройках")
+        return None
+    headers = {"Authorization": f"Bearer {_token()}"}
+    image: dict = {"link": image_url}
+    if caption:
+        image["caption"] = caption[:1024]  # лимит WhatsApp на подпись
+    payload = {"messaging_product": "whatsapp", "to": to, "type": "image", "image": image}
+    try:
+        r = httpx.post(_api_url(), json=payload, headers=headers, timeout=30)
+        if r.status_code >= 400:
+            log.error("WhatsApp send image %s: %s", r.status_code, r.text)
+            return None
+        return r.json()
+    except Exception as e:  # noqa: BLE001
+        log.error("WhatsApp send image error: %s", e)
+        return None
