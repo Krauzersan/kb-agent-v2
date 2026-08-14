@@ -20,13 +20,13 @@
 
 ### Who's this for
 
-Short answer: you don't need to be a "company" for this to be useful.
+You don't have to be a company for this to be useful.
 
 - **Small and medium businesses** — give people the same correct answer at 3pm and at 3am, without paying someone to babysit a FAQ page all day.
 - **Freelancers, consultants, solo founders** — your client gets an answer right now instead of waiting for you to dig through your notes on Monday.
 - **Regular people automating their own stuff** — a course you teach, a community you run, docs for a side project, a family business where the "process" mostly just lives in someone's head.
 
-Basically: if you can dump what you know into a bunch of files, this turns it into something people can actually talk to — in a chat window, or straight from Telegram, WhatsApp, wherever your people already hang out.
+Get what you know into files and this turns it into something people can actually talk to: through the admin panel, or straight from Telegram and WhatsApp, wherever people already are.
 
 One FastAPI service, one admin panel. No zoo of microservices, no extra database to babysit.
 
@@ -53,7 +53,7 @@ One FastAPI service, one admin panel. No zoo of microservices, no extra database
 - **Telegram** — a plain Bot API webhook. Message the bot, get an answer from the knowledge base — screenshots from the base come through as real photos, not link-dumps.
 - **WhatsApp** — the official Cloud API (Meta Business Platform). Same idea: message in, answer (and any relevant screenshot) out.
 
-Quick honesty check: Telegram and WhatsApp are the new kids here, so they're still a bit more basic — plain text questions only, per-chat memory but no rating collection, and no webhook signature verification yet (see [Connecting messaging channels](#connecting-messaging-channels) for what that means in practice). Pachca and Omnidesk have had more time in the oven — ratings, IP allowlisting, the works. Telegram/WhatsApp will get there too if it turns out people actually want that.
+Telegram and WhatsApp are newer here, so they're still a bit more basic: plain text only, per-chat memory but no rating collection yet, and no webhook signature verification (see [Connecting messaging channels](#connecting-messaging-channels) for what that means in practice). Pachca and Omnidesk have had more time in the oven — ratings, IP allowlisting, the works. They'll catch up if people actually end up using them.
 
 **Doesn't need much babysitting**
 - Password-protected admin panel with its own session — doesn't piggyback on any other login.
@@ -191,13 +191,13 @@ This is meant to run on a server you control, behind HTTPS. Set a real `ADMIN_PA
 
 ### Кому это пригодится
 
-Если коротко — «компанией» быть не обязательно, чтобы от этого была польза.
+Быть «компанией» для этого не обязательно.
 
 - **Малому и среднему бизнесу** — чтобы клиент получал один и тот же правильный ответ что в три дня, что в три ночи, и не пришлось нанимать человека, единственная работа которого — следить, чтобы FAQ не устарел.
 - **Фрилансерам, консультантам, соло-основателям** — клиент получает ответ прямо сейчас, а не ждёт до понедельника, пока вы доберётесь до своих заметок.
 - **Обычным людям, которые автоматизируют свой кусок жизни** — курс, который ведёте, сообщество, которым рулите, документация к пет-проекту, семейный бизнес, где весь «процесс» на самом деле живёт в голове одного человека и больше нигде.
 
-По сути: если вы можете собрать то, что знаете, в файлы — агент превратит это в то, с чем реально можно поговорить. В чате админки, или прямо из Telegram, WhatsApp — там, где уже сидят ваши люди.
+Соберите то, что знаете, в файлы. Дальше с этим можно разговаривать: в админке, в Telegram, в WhatsApp — где угодно, лишь бы вопрос дошёл до агента.
 
 Один FastAPI-сервис, одна админка. Никакого зоопарка микросервисов, никакой отдельной базы, за которой нужно следить.
 
@@ -224,7 +224,7 @@ This is meant to run on a server you control, behind HTTPS. Set a real `ADMIN_PA
 - **Telegram** — обычный вебхук Bot API. Написали боту — получили ответ из базы знаний, а скриншоты из базы приходят настоящими фото, а не голыми ссылками.
 - **WhatsApp** — официальный Cloud API (Meta Business Platform). Та же идея: сообщение на вход, ответ (и нужный скриншот) на выход.
 
-Честно говоря: Telegram и WhatsApp тут новенькие, поэтому чуть попроще — только текстовые вопросы, память диалога есть, а вот сбора оценок и проверки подписи вебхука пока нет (см. [«Подключение мессенджеров»](#подключение-мессенджеров), что это значит на практике). У Пачки и Omnidesk опыта побольше — оценки ответов, список разрешённых IP, всё как надо. Telegram/WhatsApp дотянем до того же уровня, если станет понятно, что оно того стоит.
+Telegram и WhatsApp тут новенькие, поэтому пока попроще: только текстовые вопросы, память диалога уже есть, а вот сбора оценок и проверки подписи вебхука ещё нет (что это значит на практике — см. [«Подключение мессенджеров»](#подключение-мессенджеров)). У Пачки и Omnidesk опыта побольше: оценки ответов, список разрешённых IP, всё как надо. Дотянем Telegram и WhatsApp до того же уровня, если станет понятно, что это того стоит.
 
 **Не требует особого присмотра**
 - Админ-панель с паролем и своей сессией — ни от кого чужого логина не зависит.
