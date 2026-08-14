@@ -1,13 +1,18 @@
-# Адрес сайта берётся из переменной DOMAIN (см. docker-compose.yml / .env):
-#   - реальный домен (kb.example.ru) -> Caddy сам выпустит HTTPS-сертификат;
-#   - значение ":80" -> работа по HTTP без сертификата (только для первичных тестов).
+# Optional reverse proxy example — not required to run the app.
+#
+# Site address comes from the DOMAIN env var:
+#   - a real domain (kb.example.com) -> Caddy issues an HTTPS certificate automatically
+#   - ":80" -> plain HTTP, no certificate (fine for quick local tests)
+#
+# Point "reverse_proxy" at wherever the container's PORT is published, e.g.
+# "localhost:8746" if you ran the container with "-p 8746:8746".
 {$DOMAIN} {
 	encode gzip
 
-	# Загрузка больших файлов в базу знаний
+	# Allow large file uploads to the knowledge base
 	request_body {
 		max_size 50MB
 	}
 
-	reverse_proxy app:8000
+	reverse_proxy localhost:8746
 }

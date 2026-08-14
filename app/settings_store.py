@@ -136,7 +136,7 @@ DEFAULTS: dict[str, object] = {
     # Публичный адрес этого сервиса (без слэша на конце) — используется, чтобы строить
     # ссылки на картинки, извлечённые из ZIP-импорта (папка kb_assets, раздаётся статикой
     # по /assets/...). Поменять, если изменится IP/домен сервиса.
-    "public_base_url": "http://81.163.28.127:8746",
+    "public_base_url": "",
     # Пачка
     "pachca_api_url": "https://api.pachca.com/api/shared/v1",
     "pachca_bot_token": "",

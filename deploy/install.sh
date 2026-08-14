@@ -1,46 +1,46 @@
 #!/usr/bin/env bash
-# Установка и запуск KB Agent без Docker (host-режим).
-# Запускать на сервере из папки проекта:  sudo bash deploy/install.sh
+# Bare-metal install (no Docker) — venv + systemd.
+# Run as root from the repo root: sudo bash deploy/install.sh [install-dir]
 set -euo pipefail
 
-APP_DIR=/opt/kb-agent
+APP_DIR="${1:-$(pwd)}"
 VENV="$APP_DIR/venv"
 
-echo "==> [1/5] Системные пакеты (Python, Tesseract OCR rus+eng)"
+echo "==> [1/5] System packages (Python, Tesseract OCR rus+eng)"
 apt-get update
 apt-get install -y --no-install-recommends \
     python3 python3-venv python3-pip \
     tesseract-ocr tesseract-ocr-rus tesseract-ocr-eng \
     libgomp1 openssl
 
-echo "==> [2/5] Виртуальное окружение Python"
+echo "==> [2/5] Python virtual environment"
 python3 -m venv "$VENV"
 "$VENV/bin/pip" install --upgrade pip wheel
 
-echo "==> [3/5] Зависимости (torch CPU + остальное). Это самый долгий шаг."
+echo "==> [3/5] Dependencies (torch CPU + the rest). This is the slowest step."
 "$VENV/bin/pip" install torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu
 "$VENV/bin/pip" install -r "$APP_DIR/app/requirements.txt"
 
-echo "==> [4/5] Файл .env"
+echo "==> [4/5] .env file"
 if [ ! -f "$APP_DIR/.env" ]; then
     cp "$APP_DIR/.env.example" "$APP_DIR/.env"
     SECRET="$(openssl rand -hex 32)"
     sed -i "s|^SESSION_SECRET=.*|SESSION_SECRET=${SECRET}|" "$APP_DIR/.env"
-    echo "    Создан $APP_DIR/.env (SESSION_SECRET сгенерирован автоматически)."
-    echo "    !!! Поменяйте ADMIN_PASSWORD в этом файле."
+    echo "    Created $APP_DIR/.env (SESSION_SECRET generated automatically)."
+    echo "    !!! Now change ADMIN_PASSWORD in that file."
 else
-    echo "    $APP_DIR/.env уже существует — не трогаю."
+    echo "    $APP_DIR/.env already exists — leaving it alone."
 fi
 mkdir -p "$APP_DIR/data"
 
-echo "==> [5/5] systemd-сервис kb-agent"
-cp "$APP_DIR/deploy/kb-agent.service" /etc/systemd/system/kb-agent.service
+echo "==> [5/5] systemd service"
+sed "s|/opt/kb-agent-v2|$APP_DIR|g" "$APP_DIR/deploy/kb-agent-v2.service" > /etc/systemd/system/kb-agent-v2.service
 systemctl daemon-reload
-systemctl enable kb-agent
-systemctl restart kb-agent
+systemctl enable kb-agent-v2
+systemctl restart kb-agent-v2
 
 echo
-echo "Готово. Сервис запущен на порту 8745."
-echo "Логи:        journalctl -u kb-agent -f"
-echo "Статус:      systemctl status kb-agent"
-echo "Проверка:    curl http://localhost:8745/health"
+echo "Done. Service running on port 8746."
+echo "Logs:   journalctl -u kb-agent-v2 -f"
+echo "Status: systemctl status kb-agent-v2"
+echo "Check:  curl http://localhost:8746/health"
