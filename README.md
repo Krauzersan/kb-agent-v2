@@ -58,6 +58,7 @@ Quick honesty check: Telegram and WhatsApp are the new kids here, so they're a b
 - Password-protected admin panel with its own session — doesn't piggyback on any other login.
 - Keys and tokens are stored encrypted in the app's own settings store, not sitting around in a config file in plain text.
 - Built-in analytics — what people are actually asking, grouped by topic, plus a per-user view if you need to dig into one weird conversation.
+- One-click Excel report (`.xlsx`, formatted and filterable) — an overview, a sheet of flagged problem answers (low-rated or answered with nothing from the knowledge base), and the full question log, all in one file for whoever likes spreadsheets more than dashboards.
 - Logs, disk usage, cleanup tools, and a "just wipe everything" switch for when a test environment needs a fresh start.
 
 ### Under the hood
@@ -210,6 +211,7 @@ This is meant to run on a server you control, behind HTTPS. Set a real `ADMIN_PA
 - Админ-панель с паролем и своей сессией — ни от кого чужого логина не зависит.
 - Ключи и токены хранятся зашифрованными в собственном хранилище настроек, а не валяются в конфиге открытым текстом.
 - Встроенная аналитика — что реально спрашивают, с группировкой по темам, плюс разбор по конкретному пользователю, если нужно понять один странный диалог.
+- Excel-отчёт в один клик (`.xlsx`, с форматированием и фильтрами) — обзор, лист с проблемными ответами (низкая оценка или ответ вообще без опоры на базу) и полный лог вопросов, одним файлом для тех, кому таблицы понятнее дашбордов.
 - Логи, место на диске, очистка, и кнопка «стереть всё» для тестовых окружений, которым нужен чистый старт.
 
 ### Технически

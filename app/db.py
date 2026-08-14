@@ -500,6 +500,24 @@ def topic_examples(topic: str, limit: int = 12) -> list:
     return out
 
 
+def all_query_log_for_export(limit: int = 20000) -> list:
+    """Весь лог вопросов для Excel-отчёта (см. export.py) — без пагинации, но с
+    разумным потолком, чтобы не утащить в память лог за годы работы одним куском."""
+    with _lock, _conn() as con:
+        rows = con.execute(
+            "SELECT * FROM query_log ORDER BY id DESC LIMIT ?", (limit,),
+        ).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        try:
+            d["sources"] = json.loads(d.get("sources") or "[]")
+        except (TypeError, ValueError):
+            d["sources"] = []
+        out.append(d)
+    return out
+
+
 def list_query_log(limit: int = 50, offset: int = 0, q: str = "") -> list:
     with _lock, _conn() as con:
         if q:

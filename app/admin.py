@@ -11,15 +11,17 @@ import unicodedata
 import urllib.parse
 import uuid
 import zipfile
+from datetime import datetime
 
 from fastapi import APIRouter, BackgroundTasks, Form, Request, UploadFile, File
-from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 from starlette.concurrency import run_in_threadpool
 from starlette.status import HTTP_303_SEE_OTHER
 
 import auth
 import db
+import export
 import gigachat_client
 import ingest
 import llm
@@ -314,6 +316,25 @@ def analytics_topic_page(request: Request, topic_name: str):
     ctx = _base_ctx(request)
     ctx.update({"topic_name": topic_name, "entries": db.topic_examples(topic_name)})
     return templates.TemplateResponse("analytics_topic.html", ctx)
+
+
+@router.get("/admin/export.xlsx")
+def export_xlsx(request: Request):
+    """Excel-отчёт: обзор, проблемные ответы (низкая оценка/без источников), полный
+    лог вопросов — см. export.py. Собирается на лету, на диске не сохраняется."""
+    auth.require_login(request)
+    data = export.build_report(
+        overview=db.rating_overview(),
+        user_stats=db.rating_stats_by_user(),
+        topic_stats=db.topic_stats(),
+        rows=db.all_query_log_for_export(),
+    )
+    filename = f"kb-agent-report-{datetime.now():%Y-%m-%d}.xlsx"
+    return Response(
+        content=data,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 def _backfill_topics() -> None:
