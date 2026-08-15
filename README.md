@@ -19,7 +19,7 @@
 > Honestly? I got tired of watching support give three different answers to the same question — not because anyone was lazy, just because the *right* answer was sitting in some PDF nobody had opened in months. So I built the thing I actually wanted: feed it your docs, and instead of a folder you have to dig through, you get something you can just... ask.
 
 <figure>
-<img src="docs/architecture.svg" alt="Diagram: channels send a question or a document into the FastAPI service. Documents get chunked and embedded into Qdrant (vectors) and SQLite FTS5 (full-text); a question is searched against both at once, results are combined by RRF fusion, refined by an optional cross-encoder reranker, sent to an LLM with automatic provider fallback, and the answer returns to whichever channel asked.">
+<img src="docs/architecture-en.svg" alt="Diagram: channels send a question or a document into the FastAPI service. Documents get chunked and embedded into Qdrant (vectors) and SQLite FTS5 (full-text); a question is searched against both at once, results are combined by RRF fusion, refined by an optional cross-encoder reranker, sent to an LLM with automatic provider fallback, and the answer returns to whichever channel asked.">
 <figcaption align="center"><sub>How a question becomes an answer — retrieval is hybrid (vector + BM25, fused with RRF), reranked, then handed to whichever LLM provider is configured.</sub></figcaption>
 </figure>
 
