@@ -6,7 +6,11 @@
   <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white">
   <img alt="Docker" src="https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white">
   <img alt="Qdrant" src="https://img.shields.io/badge/vector%20store-Qdrant-DC244C">
-  <img alt="License" src="https://img.shields.io/badge/self--hosted-your%20server%2C%20your%20data-6E56CF">
+  <img alt="Hybrid search" src="https://img.shields.io/badge/search-vector%20%2B%20BM25%20%2B%20RRF-F5A623">
+  <img alt="Self-hosted" src="https://img.shields.io/badge/self--hosted-your%20server%2C%20your%20data-6E56CF">
+  <br>
+  <img alt="Last commit" src="https://img.shields.io/github/last-commit/Krauzersan/kb-agent-v2?color=blue">
+  <img alt="Stars" src="https://img.shields.io/github/stars/Krauzersan/kb-agent-v2?style=flat&color=yellow">
 </p>
 
 <p align="center"><a href="#english"><strong>English</strong></a> &nbsp;·&nbsp; <a href="#русский"><strong>Русский</strong></a></p>
@@ -23,7 +27,24 @@
 <figcaption align="center"><sub>How a question becomes an answer — retrieval is hybrid (vector + BM25, fused with RRF), reranked, then handed to whichever LLM provider is configured.</sub></figcaption>
 </figure>
 
-### Who's this for
+<details open>
+<summary><b>📕 Table of contents</b></summary>
+
+- 🎯 [Who's this for](#who-this-is-for)
+- 🌟 [What it does](#what-it-does)
+- 🔎 [Under the hood](#under-the-hood)
+- 🚀 [Quick start — Docker Compose + HTTPS](#quickstart-docker-caddy)
+- 🐳 [Quick start — Docker, no Caddy](#quickstart-docker-no-caddy)
+- 🛠️ [Quick start — without Docker](#quickstart-no-docker)
+- 🔌 [Connecting messaging channels](#messaging-channels)
+- ⚙️ [Configuration](#configuration)
+- 📁 [Project layout](#project-layout)
+- 🔒 [A note on security](#security-note)
+
+</details>
+
+<a id="who-this-is-for"></a>
+### 🎯 Who's this for
 
 You don't have to be a company for this to be useful.
 
@@ -35,9 +56,10 @@ Get what you know into files and this turns it into something people can actuall
 
 One FastAPI service, one admin panel. No zoo of microservices, no extra database to babysit.
 
-### What it does
+<a id="what-it-does"></a>
+### 🌟 What it does
 
-**Knowledge base** — the boring-but-important part
+**📚 Knowledge base** — the boring-but-important part
 - Upload PDFs, Word/Excel files, YAML, plain text, or images. Scans and photos of whiteboards get OCR'd automatically (Russian + English), so yes, that phone photo of the whiteboard counts too.
 - No file handy? Just paste a URL or drop in raw text — and attach a few screenshots right there if the text alone doesn't tell the whole story.
 - Edit, replace, delete, bulk-select, and bump priority on the files that matter most, so the agent leans on those first.
@@ -45,33 +67,38 @@ One FastAPI service, one admin panel. No zoo of microservices, no extra database
 - Reindex all or part of it (embeddings, summaries, search index) whenever you tweak something — no need to re-upload a thing.
 - There's a test console right in the panel, so you can grill the agent yourself before a real customer does.
 
-**Brains** — pick a provider, switch whenever you feel like it, no redeploy needed:
+**🧠 Brains** — pick a provider, switch whenever you feel like it, no redeploy needed:
 - Anthropic Claude
 - OpenAI (GPT)
 - DeepSeek
 - GigaChat (Sber) — OAuth dance and Russian root CA included, so you don't have to fight with that yourself
 - Automatic fallback: if the provider you picked doesn't answer (no key, rate-limited, having a bad day), it quietly retries with the next provider that *does* have a key configured, instead of just showing the user an error.
 
-**Where it can chat**
+**💬 Where it can chat**
 - **Pachca** — webhook in, signature checked, replies as the bot.
 - **Omnidesk** — same deal via their webhook + HTTP Basic API, picks up tickets and replies inline.
 - **Telegram** — a plain Bot API webhook. Message the bot, get an answer from the knowledge base — screenshots from the base come through as real photos, not link-dumps.
 - **WhatsApp** — the official Cloud API (Meta Business Platform). Same idea: message in, answer (and any relevant screenshot) out.
 
-Telegram and WhatsApp are newer here, so they're still a bit more basic: plain text only, no conversation memory (each message is answered on its own — an earlier version kept per-chat history and it made the agent loop on old questions, so it's off on purpose for now), no rating collection, and no webhook signature verification (see [Connecting messaging channels](#connecting-messaging-channels) for what that means in practice). Pachca and Omnidesk have had more time in the oven — thread memory, ratings, IP allowlisting, the works. Telegram/WhatsApp will catch up if people actually end up using them.
+Telegram and WhatsApp are newer here, so they're still a bit more basic: plain text only, no conversation memory (each message is answered on its own — an earlier version kept per-chat history and it made the agent loop on old questions, so it's off on purpose for now), no rating collection, and no webhook signature verification (see [Connecting messaging channels](#messaging-channels) for what that means in practice). Pachca and Omnidesk have had more time in the oven — thread memory, ratings, IP allowlisting, the works. Telegram/WhatsApp will catch up if people actually end up using them.
 
-**Doesn't need much babysitting**
+**🛡️ Doesn't need much babysitting**
 - Password-protected admin panel with its own session — doesn't piggyback on any other login.
 - Keys and tokens are stored encrypted in the app's own settings store, not sitting around in a config file in plain text.
 - One Analytics page, two tabs: **Answer ratings** (who's asking, how they rate the answers, a rating-distribution chart, a 30-day question trend) and **Topics & gaps** (what people ask about most, a top-topics chart, and topics the agent answered with nothing from the knowledge base, flagged as "gaps"). No charting library — the charts are inline SVG the server draws itself. Fix a gap in the base and mark it resolved with one click; it only comes back if the same topic goes unanswered again.
 - One-click Excel report (`.xlsx`, formatted and filterable) — an overview with a rolling 7-day digest baked right in, a sheet of flagged problem answers (low-rated or answered with nothing from the knowledge base), and the full question log, all in one file for whoever likes spreadsheets more than dashboards.
 - Logs, disk usage, cleanup tools, and a "just wipe everything" switch for when a test environment needs a fresh start.
 
-### Under the hood
+<a id="under-the-hood"></a>
+### 🔎 Under the hood
 
 **Retrieval** — how a question finds the right chunk:
 - **Hybrid search** — a vector search (semantic similarity) and a BM25 lexical search (SQLite FTS5) run independently, then get combined with **Reciprocal Rank Fusion**. This matters more than it sounds: a chunk with an exact match — an error code, a version number, a product name — can rank low semantically and never make it into a pure vector top-N. Fusing two independent result lists means a strong lexical hit surfaces even when the embedding never would have found it on its own.
 - **Cross-encoder reranker** (optional, off by default) — vector and BM25 each score a chunk against the question in isolation; a reranker reads the question *and* the chunk together in one pass, which ranks more accurately at the cost of a CPU pass per candidate. Runs only over the narrow pool hybrid search already picked, not the whole base. Toggle it in Settings → Search.
+
+  > [!WARNING]
+  > CPU-only, no batching, and it scores the *whole* hybrid pool (`top_k × 3`, or more) on every question. `BAAI/bge-reranker-v2-m3` alone needs a good chunk of a GB resident in memory, and scoring dozens of real-length chunks on a small/shared box can take well over a minute — past most reverse-proxy timeouts. Fine on a machine with a few dedicated CPU cores and 4 GB+ RAM to spare; leave it off on a cramped VPS.
+
 - Priority boost for files marked ★, and a same-topic filter so, say, a question about one POS system's refund flow doesn't get an answer built from a different POS system's docs.
 
 **Everything else:**
@@ -90,7 +117,8 @@ Telegram and WhatsApp are newer here, so they're still a bit more basic: plain t
 
 Nothing exotic, just parts chosen so you don't need a DevOps team to run this thing.
 
-### Quick start (Docker Compose + HTTPS)
+<a id="quickstart-docker-caddy"></a>
+### 🚀 Quick start (Docker Compose + HTTPS)
 
 The easiest way to run this somewhere real — Caddy in front, automatic HTTPS, one command:
 
@@ -104,9 +132,13 @@ docker compose up -d --build
 
 Point `DOMAIN` in `.env` at a real domain (`kb.example.com`) pointed at this server and Caddy gets you a certificate automatically; leave it as `:80` for plain HTTP on a local/test box. The app container isn't exposed directly — everything goes through Caddy. Open `https://your-domain/` and log in with the `ADMIN_PASSWORD` you set.
 
-### Quick start (Docker, no Caddy)
+<a id="quickstart-docker-no-caddy"></a>
+### 🐳 Quick start (Docker, no Caddy)
 
-Prefer to handle TLS yourself, or run behind an existing reverse proxy? Vector search needs a Qdrant instance reachable at `QDRANT_URL` — the command below runs one alongside the app on a shared Docker network:
+Prefer to handle TLS yourself, or run behind an existing reverse proxy? The command below runs Qdrant alongside the app on a shared Docker network.
+
+> [!TIP]
+> Vector search needs a Qdrant instance reachable at `QDRANT_URL` — the `docker run` for it below isn't optional, even in the "no Caddy" setup.
 
 ```bash
 git clone https://github.com/Krauzersan/kb-agent-v2.git
@@ -129,7 +161,8 @@ docker run -d \
 
 Open `http://localhost:8746/` and log in with the password you set. Either way — AI provider keys and integration tokens are entered later, inside the admin panel's Settings tab, never in `.env`.
 
-### Quick start (without Docker)
+<a id="quickstart-no-docker"></a>
+### 🛠️ Quick start (without Docker)
 
 If you'd rather run it directly on a Linux box with systemd. You'll need a Qdrant instance running too — see [Qdrant's own quick start](https://qdrant.tech/documentation/quickstart/) — `QDRANT_URL` in `.env` defaults to `http://127.0.0.1:6333`, so the simplest setup runs it on the same box:
 
@@ -145,9 +178,11 @@ venv/bin/uvicorn main:app --app-dir app --host 0.0.0.0 --port 8746
 
 Or skip the manual steps and run `sudo bash deploy/install.sh` from the repo root — it installs everything above as a systemd service (still doesn't install Qdrant itself — set that up first).
 
-### Connecting messaging channels
+<a id="messaging-channels"></a>
+### 🔌 Connecting messaging channels
 
-Both integrations are basic on purpose: plain-text questions in, plain-text answers out, no signature verification on the webhook yet. That's fine behind a firewall or for a low-traffic bot; if the endpoint is going to sit on the open internet and get real traffic, add Telegram's `secret_token` header check or WhatsApp's `X-Hub-Signature-256` verification before relying on it (both endpoints are short, single-purpose files — `app/telegram_webhook.py` and `app/whatsapp_webhook.py` — easy to extend).
+> [!CAUTION]
+> Both integrations are basic on purpose: plain-text questions in, plain-text answers out, no signature verification on the webhook yet. That's fine behind a firewall or for a low-traffic bot; if the endpoint is going to sit on the open internet and get real traffic, add Telegram's `secret_token` header check or WhatsApp's `X-Hub-Signature-256` verification before relying on it (both endpoints are short, single-purpose files — `app/telegram_webhook.py` and `app/whatsapp_webhook.py` — easy to extend).
 
 Both also support an allowlist — a list of Telegram usernames/IDs or WhatsApp phone numbers, set in the same Settings tab. Leave it empty and the bot answers whoever writes to it; fill it in and everyone else gets a polite "no access" reply instead of an answer.
 
@@ -164,7 +199,8 @@ Both also support an allowlist — a list of Telegram usernames/IDs or WhatsApp 
 3. Meta doesn't offer an API for this next part, so it's the one manual step: in the app's WhatsApp → Configuration screen, set the webhook URL to `https://your-domain.com/webhook/whatsapp`, paste the same verify token, and subscribe to the **messages** field. Meta calls the endpoint with a GET request first — it only succeeds if the verify token matches.
 4. Message the test number from WhatsApp. It should answer from the knowledge base.
 
-### Configuration
+<a id="configuration"></a>
+### ⚙️ Configuration
 
 Everything in `.env` is infrastructure only — ports, storage location, the admin password. All API keys and third-party tokens (Claude/OpenAI/DeepSeek/GigaChat, Pachca, Omnidesk, Telegram, WhatsApp) are configured from the admin panel's Settings tab and stored encrypted — none of them live in `.env`.
 
@@ -184,7 +220,8 @@ Everything in `.env` is infrastructure only — ports, storage location, the adm
 | `ENCRYPTION_KEY` | *(empty)* | Optional key to encrypt stored API keys/tokens at rest |
 | `DOMAIN` | `:80` | Docker Compose only — site address for the Caddy service (real domain = automatic HTTPS) |
 
-### Project layout
+<a id="project-layout"></a>
+### 📁 Project layout
 
 ```
 kb-agent-v2/
@@ -215,7 +252,8 @@ kb-agent-v2/
     └── templates/           # admin UI pages
 ```
 
-### A note on security
+<a id="security-note"></a>
+### 🔒 A note on security
 
 This is meant to run on a server you control, behind HTTPS. Set a real `ADMIN_PASSWORD` and a random `SESSION_SECRET` before exposing it to the internet, and set `ENCRYPTION_KEY` if you want the stored provider keys encrypted at rest rather than in plain SQLite.
 
@@ -231,7 +269,24 @@ This is meant to run on a server you control, behind HTTPS. Set a real `ADMIN_PA
 <figcaption align="center"><sub>Как вопрос становится ответом — поиск гибридный (вектор + BM25, объединены RRF), результат уточняется реранкером, и уже потом уходит в выбранного LLM-провайдера.</sub></figcaption>
 </figure>
 
-### Кому это пригодится
+<details open>
+<summary><b>📕 Оглавление</b></summary>
+
+- 🎯 [Кому это пригодится](#komu-eto-prigoditsya)
+- 🌟 [Что умеет](#chto-umeet)
+- 🔎 [Технически](#tehnicheski)
+- 🚀 [Быстрый старт — Docker Compose + HTTPS](#quickstart-docker-caddy-ru)
+- 🐳 [Быстрый старт — Docker, без Caddy](#quickstart-docker-no-caddy-ru)
+- 🛠️ [Быстрый старт — без Docker](#quickstart-no-docker-ru)
+- 🔌 [Подключение мессенджеров](#подключение-мессенджеров)
+- ⚙️ [Конфигурация](#konfiguratsiya)
+- 📁 [Структура проекта](#struktura-proekta)
+- 🔒 [О безопасности](#o-bezopasnosti)
+
+</details>
+
+<a id="komu-eto-prigoditsya"></a>
+### 🎯 Кому это пригодится
 
 Быть «компанией» для этого не обязательно.
 
@@ -243,9 +298,10 @@ This is meant to run on a server you control, behind HTTPS. Set a real `ADMIN_PA
 
 Один FastAPI-сервис, одна админка. Никакого зоопарка микросервисов, никакой отдельной базы, за которой нужно следить.
 
-### Что умеет
+<a id="chto-umeet"></a>
+### 🌟 Что умеет
 
-**База знаний** — скучная, но важная часть
+**📚 База знаний** — скучная, но важная часть
 - Загружайте PDF, Word/Excel, YAML, обычный текст или картинки. Сканы и фото досок распознаются сами через OCR (русский + английский) — да, то самое фото доски с телефона тоже сработает.
 - Нет файла под рукой — просто вставьте ссылку или кусок текста, и сразу же приложите пару скриншотов, если одним текстом не обойтись.
 - Редактирование, замена, удаление, массовые операции, и приоритет для важных файлов, чтобы агент в первую очередь опирался на них.
@@ -253,14 +309,14 @@ This is meant to run on a server you control, behind HTTPS. Set a real `ADMIN_PA
 - Переиндексация целиком или частично (эмбеддинги, каталог, полнотекстовый поиск) при любых правках — без повторной загрузки файлов.
 - Тестовая консоль прямо в админке — можно самим погонять агента вопросами, прежде чем это сделает настоящий клиент.
 
-**Мозги** — выбираете провайдера, переключаете когда захотите, без передеплоя:
+**🧠 Мозги** — выбираете провайдера, переключаете когда захотите, без передеплоя:
 - Anthropic Claude
 - OpenAI (GPT)
 - DeepSeek
 - GigaChat (Сбер) — с их OAuth-плясками и российским корневым сертификатом уже разобрались за вас
 - Автоматический фоллбэк: если выбранный провайдер не ответил (нет ключа, упал лимит, у него просто плохой день) — агент тихо пробует следующий провайдер, у которого ключ *есть*, вместо того чтобы просто показать пользователю ошибку.
 
-**Где может общаться**
+**💬 Где может общаться**
 - **Пачка** — вебхук на вход, подпись проверяется, отвечает от имени бота.
 - **Omnidesk** — та же идея через их вебхук и HTTP Basic API: подхватывает обращения, отвечает прямо в тикете.
 - **Telegram** — обычный вебхук Bot API. Написали боту — получили ответ из базы знаний, а скриншоты из базы приходят настоящими фото, а не голыми ссылками.
@@ -268,18 +324,23 @@ This is meant to run on a server you control, behind HTTPS. Set a real `ADMIN_PA
 
 Telegram и WhatsApp тут новенькие, поэтому пока попроще: только текстовые вопросы, без памяти диалога (каждое сообщение обрабатывается само по себе — раньше память была, но с ней агент зацикливался на старых вопросах, поэтому сейчас она намеренно выключена), без сбора оценок и без проверки подписи вебхука (что это значит на практике — см. [«Подключение мессенджеров»](#подключение-мессенджеров)). У Пачки и Omnidesk опыта побольше: память треда, оценки ответов, список разрешённых IP, всё как надо. Дотянем Telegram и WhatsApp до того же уровня, если станет понятно, что это того стоит.
 
-**Не требует особого присмотра**
+**🛡️ Не требует особого присмотра**
 - Админ-панель с паролем и своей сессией — ни от кого чужого логина не зависит.
 - Ключи и токены хранятся зашифрованными в собственном хранилище настроек, а не валяются в конфиге открытым текстом.
 - Один раздел «Аналитика», две вкладки: **«Оценки ответов»** (кто спрашивает, как оценивают ответы, график распределения оценок, тренд вопросов за 30 дней) и **«Темы и пробелы»** (о чём спрашивают чаще всего, график топ-тем, и темы, на которые агент ответил вообще без опоры на базу — помечаются как «пробел»). Без сторонних графических библиотек — графики это inline SVG, которые сервер рисует сам. Дополнили базу — отметили пробел исправленным одним кликом; появится снова, только если по этой теме опять ответят без источника.
 - Excel-отчёт в один клик (`.xlsx`, с форматированием и фильтрами) — обзор со встроенным дайджестом за последние 7 дней, лист с проблемными ответами (низкая оценка или ответ вообще без опоры на базу) и полный лог вопросов, одним файлом для тех, кому таблицы понятнее дашбордов.
 - Логи, место на диске, очистка, и кнопка «стереть всё» для тестовых окружений, которым нужен чистый старт.
 
-### Технически
+<a id="tehnicheski"></a>
+### 🔎 Технически
 
 **Поиск** — как вопрос находит нужный кусок текста:
 - **Гибридный поиск** — векторный поиск (смысловая близость) и лексический BM25-поиск (SQLite FTS5) работают независимо друг от друга, а потом объединяются через **Reciprocal Rank Fusion**. Это не мелочь: кусок с точным совпадением — код ошибки, номер версии, название модели — может ранжироваться низко по смыслу и вообще не попасть в топ вектора. Объединение двух независимых списков результатов означает, что сильное лексическое совпадение всплывёт, даже если эмбеддинг сам по себе его бы никогда не нашёл.
 - **Кросс-энкодер реранкер** (опционально, по умолчанию выключен) — вектор и BM25 оценивают кусок относительно вопроса каждый по отдельности; реранкер читает вопрос и кусок ВМЕСТЕ, за один проход — ранжирует точнее, но ценой прохода модели на процессоре на каждого кандидата. Работает только над узким пулом, который уже отобрал гибридный поиск, не над всей базой. Включается во вкладке Настройки → Поиск.
+
+  > [!WARNING]
+  > Считает только на CPU, без батчинга, и оценивает весь пул гибридного поиска (`top_k × 3` и больше) на каждый вопрос. Одна только `BAAI/bge-reranker-v2-m3` резидентно держит в памяти около гигабайта, а прогон нескольких десятков кусков реального размера на маленьком/общем сервере может занять больше минуты — дольше таймаута большинства реверс-прокси. Нормально на машине с несколькими выделенными ядрами и запасом 4+ ГБ RAM; на тесном VPS лучше оставить выключенным.
+
 - Буст приоритетных файлов (★) и фильтр «не путать похожие темы» — например, чтобы вопрос про возврат в одной кассовой системе не собрал ответ из документации другой кассы.
 
 **Всё остальное:**
@@ -298,7 +359,8 @@ Telegram и WhatsApp тут новенькие, поэтому пока попр
 
 Ничего экзотического — стек собран так, чтобы для запуска не нужна была отдельная DevOps-команда.
 
-### Быстрый старт (Docker Compose + HTTPS)
+<a id="quickstart-docker-caddy-ru"></a>
+### 🚀 Быстрый старт (Docker Compose + HTTPS)
 
 Самый простой способ поднять это на реальном сервере — Caddy спереди, HTTPS сам собой, одна команда:
 
@@ -312,9 +374,13 @@ docker compose up -d --build
 
 Укажите в `.env` в `DOMAIN` настоящий домен (`kb.example.com`), направленный на этот сервер, — и Caddy сам получит сертификат. Для локального/тестового запуска оставьте `:80` — будет обычный HTTP. Контейнер приложения наружу не торчит — весь трафик идёт только через Caddy. Откройте `https://ваш-домен/` и войдите по `ADMIN_PASSWORD`.
 
-### Быстрый старт (Docker, без Caddy)
+<a id="quickstart-docker-no-caddy-ru"></a>
+### 🐳 Быстрый старт (Docker, без Caddy)
 
-Хотите сами разобраться с TLS или запускаете за уже существующим реверс-прокси? Векторному поиску нужен доступный по `QDRANT_URL` инстанс Qdrant — команда ниже поднимает его рядом с приложением в общей Docker-сети:
+Хотите сами разобраться с TLS или запускаете за уже существующим реверс-прокси? Команда ниже поднимает Qdrant рядом с приложением в общей Docker-сети.
+
+> [!TIP]
+> Векторному поиску нужен доступный по `QDRANT_URL` инстанс Qdrant — `docker run` для него ниже не опционален, даже в варианте «без Caddy».
 
 ```bash
 git clone https://github.com/Krauzersan/kb-agent-v2.git
@@ -337,7 +403,8 @@ docker run -d \
 
 Откройте `http://localhost:8746/` и войдите по паролю, который задали. В обоих случаях ключи AI-провайдеров и токены интеграций вводятся позже, во вкладке «Настройки» в админке — в `.env` они не хранятся никогда.
 
-### Быстрый старт (без Docker)
+<a id="quickstart-no-docker-ru"></a>
+### 🛠️ Быстрый старт (без Docker)
 
 Если хотите запускать напрямую на Linux-сервере через systemd. Понадобится ещё и запущенный Qdrant — см. [его собственный быстрый старт](https://qdrant.tech/documentation/quickstart/) — `QDRANT_URL` в `.env` по умолчанию `http://127.0.0.1:6333`, так что проще всего запустить его на этой же машине:
 
@@ -354,9 +421,10 @@ venv/bin/uvicorn main:app --app-dir app --host 0.0.0.0 --port 8746
 Либо пропустите ручные шаги и запустите `sudo bash deploy/install.sh` из корня репозитория — он поставит всё вышеперечисленное как systemd-сервис (сам Qdrant install.sh не ставит — разверните его отдельно заранее).
 
 <a id="подключение-мессенджеров"></a>
-### Подключение мессенджеров
+### 🔌 Подключение мессенджеров
 
-Обе интеграции намеренно базовые: текст вопроса на входе, текст ответа на выходе, без проверки подписи вебхука. Для закрытого сервера или бота с небольшим трафиком этого достаточно; если эндпоинт будет смотреть в открытый интернет и получать реальный трафик — добавьте проверку заголовка `secret_token` у Telegram или `X-Hub-Signature-256` у WhatsApp, прежде чем полагаться на это всерьёз (оба эндпоинта — короткие файлы на одну задачу: `app/telegram_webhook.py` и `app/whatsapp_webhook.py`, дополнить несложно).
+> [!CAUTION]
+> Обе интеграции намеренно базовые: текст вопроса на входе, текст ответа на выходе, без проверки подписи вебхука. Для закрытого сервера или бота с небольшим трафиком этого достаточно; если эндпоинт будет смотреть в открытый интернет и получать реальный трафик — добавьте проверку заголовка `secret_token` у Telegram или `X-Hub-Signature-256` у WhatsApp, прежде чем полагаться на это всерьёз (оба эндпоинта — короткие файлы на одну задачу: `app/telegram_webhook.py` и `app/whatsapp_webhook.py`, дополнить несложно).
 
 В обеих есть список разрешённых пользователей — задаётся там же, во вкладке «Настройки». Пусто — отвечает всем, кто напишет. Заполнено (username/id для Telegram, номера для WhatsApp) — остальным вместо ответа приходит вежливый отказ.
 
@@ -373,7 +441,8 @@ venv/bin/uvicorn main:app --app-dir app --host 0.0.0.0 --port 8746
 3. Этот шаг API от Meta не предусматривает, так что он единственный ручной: в настройках приложения (WhatsApp → Configuration) укажите адрес вебхука `https://ваш-домен.ru/webhook/whatsapp`, тот же verify-токен, подпишитесь на событие **messages**. Meta сначала сделает GET-запрос — он пройдёт, только если verify-токен совпадёт.
 4. Напишите на тестовый номер в WhatsApp — должен ответить по базе знаний.
 
-### Конфигурация
+<a id="konfiguratsiya"></a>
+### ⚙️ Конфигурация
 
 Всё, что в `.env` — исключительно инфраструктура: порт, где хранить данные, пароль админки. Все API-ключи и токены (Claude/OpenAI/DeepSeek/GigaChat, Пачка, Omnidesk, Telegram, WhatsApp) настраиваются из вкладки «Настройки» в админке и хранятся зашифрованными — ни один из них не лежит в `.env`.
 
@@ -393,7 +462,8 @@ venv/bin/uvicorn main:app --app-dir app --host 0.0.0.0 --port 8746
 | `ENCRYPTION_KEY` | *(пусто)* | Опциональный ключ для шифрования хранимых ключей/токенов |
 | `DOMAIN` | `:80` | Только для Docker Compose — адрес сайта для сервиса Caddy (настоящий домен = HTTPS автоматически) |
 
-### Структура проекта
+<a id="struktura-proekta"></a>
+### 📁 Структура проекта
 
 ```
 kb-agent-v2/
@@ -424,7 +494,8 @@ kb-agent-v2/
     └── templates/           # страницы админки
 ```
 
-### О безопасности
+<a id="o-bezopasnosti"></a>
+### 🔒 О безопасности
 
 Сервис рассчитан на запуск на своём сервере, за HTTPS. Перед тем как открывать его наружу, задайте настоящий `ADMIN_PASSWORD` и случайный `SESSION_SECRET`, а если хотите, чтобы ключи провайдеров хранились зашифрованными, а не в открытом виде в SQLite — задайте `ENCRYPTION_KEY`.
 
