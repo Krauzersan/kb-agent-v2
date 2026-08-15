@@ -173,12 +173,19 @@ def _rrf_fuse(vector_hits: list, bm25_hits: list) -> list:
     return cand
 
 
-def _search_with_priority(question: str, top_k: int) -> list:
+def _search_with_priority(question: str, top_k: int) -> tuple[list, bool]:
     """Если есть приоритетные файлы — мягко поднимаем их выше в выдаче.
 
     Берём больше кандидатов, приоритетным добавляем к близости небольшой буст,
     ре-ранкуем и берём top_k. Так приоритетные источники идут первыми, но при
     отсутствии в них релевантного — подмешиваются обычные (комбинирование).
+
+    Возвращает (hits, reranked) — reranked=True, только если кросс-энкодер реально
+    отработал на этом запросе (не просто включён в настройках, а именно посчитал
+    скор, не упав). Вызывающий код использует это, чтобы выбрать, каким порогом
+    релевантности гейтить: h["rerank"] (калиброванная сигмоида кросс-энкодера) или
+    h["score"] (косинус) — это РАЗНЫЕ шкалы, поэтому и пороги разные настройки
+    (min_relevance_rerank vs min_relevance), см. _answer_question.
     """
     prio_ids = db.priority_file_ids()          # берём из БД — всегда актуально
     try:
@@ -201,11 +208,13 @@ def _search_with_priority(question: str, top_k: int) -> list:
     # только для уже отобранного узкого пула (cand), не для всей базы. Если выключен
     # или упал (модель не скачалась, память и т.п.) — используем RRF-скор как есть,
     # деградация мягкая, без потери ответа.
+    reranked = False
     if cand and settings_store.get("reranker_enabled"):
         try:
             scores = reranker.score(question, [h.get("text") or "" for h in cand])
             for h, s in zip(cand, scores):
                 h["rerank"] = s
+            reranked = True
         except Exception:
             log.exception("Реранкер упал — используем RRF-скор без него")
             for h in cand:
@@ -222,7 +231,7 @@ def _search_with_priority(question: str, top_k: int) -> list:
     if prio_ids and boost > 0:
         log.info("Поиск: приоритетных файлов=%s, буст=%s, приоритетных в выдаче=%s из %s",
                  len(prio_ids), boost, sum(1 for h in top if h["priority"]), len(top))
-    return top
+    return top, reranked
 
 
 def answer_question(question: str, history=None, channel: str = "internal",
@@ -293,18 +302,23 @@ def _answer_question(question: str, history=None, channel: str = "internal") -> 
 
     vectorstore.ensure_collection()
     top_k = int(settings_store.get("top_k"))
-    hits = _search_with_priority(_search_query(question, history), top_k)
+    hits, reranked = _search_with_priority(_search_query(question, history), top_k)
 
     # Предохранитель: если ничего достаточно похожего не нашлось — не даём модели
-    # домысливать, а честно сообщаем, что в базе ответа нет.
+    # домысливать, а честно сообщаем, что в базе ответа нет. Косинус и сигмоида
+    # кросс-энкодера — разные шкалы (0.72 у них означает разное), поэтому у каждой
+    # свой порог: min_relevance_rerank применяется, только если реранкер реально
+    # отработал на ЭТОМ запросе (а не просто включён в настройках); иначе — как раньше,
+    # min_relevance по косинусу.
+    score_key, setting_key = ("rerank", "min_relevance_rerank") if reranked else ("score", "min_relevance")
     try:
-        min_rel = float(settings_store.get("min_relevance") or 0)
+        min_rel = float(settings_store.get(setting_key) or 0)
     except (TypeError, ValueError):
         min_rel = 0.0
     if min_rel > 0:
-        relevant = [h for h in hits if (h.get("score") or 0) >= min_rel]
+        relevant = [h for h in hits if (h.get(score_key) or 0) >= min_rel]
         if not relevant:
-            best = max((h.get("score") or 0) for h in hits) if hits else 0
+            best = max((h.get(score_key) or 0) for h in hits) if hits else 0
             return {
                 "answer": "В базе знаний нет информации по этому вопросу. "
                           "Уточните формулировку или обратитесь к коллеге.",
