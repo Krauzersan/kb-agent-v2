@@ -23,8 +23,8 @@
 > Honestly? I got tired of watching support give three different answers to the same question — not because anyone was lazy, just because the *right* answer was sitting in some PDF nobody had opened in months. So I built the thing I actually wanted: feed it your docs, and instead of a folder you have to dig through, you get something you can just... ask.
 
 <figure>
-<img src="docs/architecture-en.svg" alt="Diagram: channels send a question or a document into the FastAPI service. Documents get chunked and embedded into Qdrant (vectors) and SQLite FTS5 (full-text); a question is searched against both at once, results are combined by RRF fusion, refined by an optional cross-encoder reranker, sent to an LLM with automatic provider fallback, and the answer returns to whichever channel asked.">
-<figcaption align="center"><sub>How a question becomes an answer — retrieval is hybrid (vector + BM25, fused with RRF), reranked, then handed to whichever LLM provider is configured.</sub></figcaption>
+<img src="docs/architecture-en.svg" alt="Diagram: channels send a question or a document into the FastAPI service. Documents get chunked and embedded into Qdrant (vectors) and SQLite FTS5 (full-text). A question is first classified by a router into FAST, AGGREGATION, or DEEP: FAST searches both stores at once and fuses results with RRF, refined by an optional cross-encoder reranker; AGGREGATION scans the catalog or the full text of the base; DEEP decomposes the question into sub-questions, searches facts for each, drafts a plan, and generates the answer section by section. All three paths go to an LLM with automatic provider fallback, and the answer returns to whichever channel asked.">
+<figcaption align="center"><sub>How a question becomes an answer — a router picks FAST (hybrid search + RRF + reranker), AGGREGATION (catalog/full-scan), or DEEP (decompose → plan → per-section generation) before handing off to whichever LLM provider is configured.</sub></figcaption>
 </figure>
 
 <details open>
@@ -273,8 +273,8 @@ This is meant to run on a server you control, behind HTTPS. Set a real `ADMIN_PA
 > Если честно — я просто устал смотреть, как саппорт даёт три разных ответа на один и тот же вопрос. И дело не в том, что кто-то ленился — правильный ответ реально лежал в каком-то PDF-е, который никто не открывал с момента, как его написали. Вот и сделал то, чего самому не хватало: скармливаешь агенту документы, и вместо папки, которую надо *перерывать*, получаешь то, у чего можно просто... взять и спросить.
 
 <figure>
-<img src="docs/architecture.svg" alt="Диаграмма: каналы отправляют вопрос или документ в FastAPI-сервис. Документы режутся на куски и индексируются в Qdrant (векторы) и SQLite FTS5 (полнотекстовый поиск); вопрос ищется в обоих сразу, результаты объединяются RRF-фьюжном, уточняются опциональным кросс-энкодер реранкером, передаются в LLM с автоматическим фоллбэком между провайдерами, и ответ возвращается в тот канал, откуда пришёл вопрос.">
-<figcaption align="center"><sub>Как вопрос становится ответом — поиск гибридный (вектор + BM25, объединены RRF), результат уточняется реранкером, и уже потом уходит в выбранного LLM-провайдера.</sub></figcaption>
+<img src="docs/architecture.svg" alt="Диаграмма: каналы отправляют вопрос или документ в FastAPI-сервис. Документы режутся на куски и индексируются в Qdrant (векторы) и SQLite FTS5 (полнотекстовый поиск). Вопрос сначала классифицируется роутером на FAST, AGGREGATION или DEEP: FAST ищется в обоих хранилищах сразу, результаты объединяются RRF-фьюжном и уточняются опциональным кросс-энкодер реранкером; AGGREGATION идёт в обход каталога или полного текста базы; DEEP раскладывается на подвопросы, ищет факты по каждому, строит план и генерирует ответ по разделам. Все три пути передаются в LLM с автоматическим фоллбэком между провайдерами, и ответ возвращается в тот канал, откуда пришёл вопрос.">
+<figcaption align="center"><sub>Как вопрос становится ответом — роутер выбирает FAST (гибридный поиск + RRF + реранкер), AGGREGATION (каталог/полный обход) или DEEP (декомпозиция → план → генерация по разделам), и уже потом ответ уходит в выбранного LLM-провайдера.</sub></figcaption>
 </figure>
 
 <details open>
