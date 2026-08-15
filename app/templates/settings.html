@@ -234,7 +234,7 @@
       <div class="field">
         <label>Длина ответа (максимум токенов)<span class="help">?<span class="tip">Ограничивает длину ответа. 1 токен ≈ 3–4 символа. Больше — подробнее, но дороже и медленнее. Обычно хватает 500–1500.</span></span></label>
         <div class="slider-row">
-          <input type="range" name="claude_max_tokens" min="256" max="4000" step="128" value="{{ s.claude_max_tokens }}"
+          <input type="range" name="claude_max_tokens" min="256" max="8000" step="128" value="{{ s.claude_max_tokens }}"
                  oninput="document.getElementById('tokval').textContent=this.value">
           <span class="sliderval" id="tokval">{{ s.claude_max_tokens }}</span>
         </div>
