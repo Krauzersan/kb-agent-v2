@@ -16,8 +16,10 @@ node_modules/
 .DS_Store
 data/
 .env
+.env.dev
 .env.backup*
 .env.pre-rotate*
+dev-import/
 *.bak*
 *.pre-*-[0-9]*
 backup_pre_*

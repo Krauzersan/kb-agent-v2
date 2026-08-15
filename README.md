@@ -18,6 +18,11 @@
 
 > Honestly? I got tired of watching support give three different answers to the same question — not because anyone was lazy, just because the *right* answer was sitting in some PDF nobody had opened in months. So I built the thing I actually wanted: feed it your docs, and instead of a folder you have to dig through, you get something you can just... ask.
 
+<figure>
+<img src="docs/architecture.svg" alt="Diagram: channels send a question or a document into the FastAPI service. Documents get chunked and embedded into Qdrant (vectors) and SQLite FTS5 (full-text); a question is searched against both at once, results are combined by RRF fusion, refined by an optional cross-encoder reranker, sent to an LLM with automatic provider fallback, and the answer returns to whichever channel asked.">
+<figcaption align="center"><sub>How a question becomes an answer — retrieval is hybrid (vector + BM25, fused with RRF), reranked, then handed to whichever LLM provider is configured.</sub></figcaption>
+</figure>
+
 ### Who's this for
 
 You don't have to be a company for this to be useful.
@@ -64,7 +69,26 @@ Telegram and WhatsApp are newer here, so they're still a bit more basic: plain t
 
 ### Under the hood
 
-FastAPI, an embedded Qdrant for vector search (no extra server — just files on disk), multilingual `e5` embeddings, SQLite for metadata and full-text search, Tesseract for OCR. Nothing exotic, just parts chosen so you don't need a DevOps team to run this thing.
+**Retrieval** — how a question finds the right chunk:
+- **Hybrid search** — a vector search (semantic similarity) and a BM25 lexical search (SQLite FTS5) run independently, then get combined with **Reciprocal Rank Fusion**. This matters more than it sounds: a chunk with an exact match — an error code, a version number, a product name — can rank low semantically and never make it into a pure vector top-N. Fusing two independent result lists means a strong lexical hit surfaces even when the embedding never would have found it on its own.
+- **Cross-encoder reranker** (optional, off by default) — vector and BM25 each score a chunk against the question in isolation; a reranker reads the question *and* the chunk together in one pass, which ranks more accurately at the cost of a CPU pass per candidate. Runs only over the narrow pool hybrid search already picked, not the whole base. Toggle it in Settings → Search.
+- Priority boost for files marked ★, and a same-topic filter so, say, a question about one POS system's refund flow doesn't get an answer built from a different POS system's docs.
+
+**Everything else:**
+
+| Layer | What runs there |
+|---|---|
+| Web / API | FastAPI, Uvicorn, server-rendered Jinja2 admin panel (no separate frontend build) |
+| Vector search | Qdrant — its own process (Docker Compose runs it as a sidecar; a bare-metal install expects one already running) |
+| Metadata, full-text, settings | SQLite — file registry, query log, FTS5 for lexical search, encrypted key/value settings store |
+| Embeddings & reranking | `sentence-transformers` on CPU — `intfloat/multilingual-e5-base` for embeddings, `BAAI/bge-reranker-v2-m3` for reranking (both restart-only to swap) |
+| LLM providers | Anthropic Claude, OpenAI, DeepSeek, GigaChat (Sber) — picked per-request with automatic fallback if the primary one has no key or errors out |
+| Document parsing | `pypdf`, `python-docx`, `openpyxl`, PyYAML, Pillow + Tesseract OCR (Russian + English) |
+| Reports | `openpyxl` — formatted, filterable `.xlsx` export straight from the admin panel |
+| Secrets at rest | `cryptography` (Fernet) — encrypts stored provider keys/tokens when `ENCRYPTION_KEY` is set |
+| Deploy | Docker + Docker Compose, Caddy for automatic HTTPS, or plain systemd on bare metal |
+
+Nothing exotic, just parts chosen so you don't need a DevOps team to run this thing.
 
 ### Quick start (Docker Compose + HTTPS)
 
@@ -82,17 +106,22 @@ Point `DOMAIN` in `.env` at a real domain (`kb.example.com`) pointed at this ser
 
 ### Quick start (Docker, no Caddy)
 
-Prefer to handle TLS yourself, or run behind an existing reverse proxy?
+Prefer to handle TLS yourself, or run behind an existing reverse proxy? Vector search needs a Qdrant instance reachable at `QDRANT_URL` — the command below runs one alongside the app on a shared Docker network:
 
 ```bash
 git clone https://github.com/Krauzersan/kb-agent-v2.git
 cd kb-agent-v2
 cp .env.example .env      # then edit ADMIN_PASSWORD at the very least
 
+docker network create kb-agent-net
+docker run -d --name kb-agent-qdrant --network kb-agent-net -v kb-agent-qdrant:/qdrant/storage qdrant/qdrant:latest
+
 docker build -t kb-agent-v2 .
 docker run -d \
   --name kb-agent-v2 \
+  --network kb-agent-net \
   --env-file .env \
+  -e QDRANT_URL=http://kb-agent-qdrant:6333 \
   -p 8746:8746 \
   -v kb-agent-data:/data \
   kb-agent-v2
@@ -102,7 +131,7 @@ Open `http://localhost:8746/` and log in with the password you set. Either way �
 
 ### Quick start (without Docker)
 
-If you'd rather run it directly on a Linux box with systemd:
+If you'd rather run it directly on a Linux box with systemd. You'll need a Qdrant instance running too — see [Qdrant's own quick start](https://qdrant.tech/documentation/quickstart/) — `QDRANT_URL` in `.env` defaults to `http://127.0.0.1:6333`, so the simplest setup runs it on the same box:
 
 ```bash
 python3 -m venv venv
@@ -114,7 +143,7 @@ cp .env.example .env      # edit ADMIN_PASSWORD, generate a SESSION_SECRET
 venv/bin/uvicorn main:app --app-dir app --host 0.0.0.0 --port 8746
 ```
 
-Or skip the manual steps and run `sudo bash deploy/install.sh` from the repo root — it does all of the above and installs `kb-agent-v2` as a systemd service.
+Or skip the manual steps and run `sudo bash deploy/install.sh` from the repo root — it installs everything above as a systemd service (still doesn't install Qdrant itself — set that up first).
 
 ### Connecting messaging channels
 
@@ -143,10 +172,15 @@ Everything in `.env` is infrastructure only — ports, storage location, the adm
 |---|---|---|
 | `PORT` | `8746` | Port the service listens on |
 | `DATA_DIR` | `./data` | Where the knowledge base, database, vector index and model cache live |
+| `QDRANT_URL` | `http://127.0.0.1:6333` | Where to reach Qdrant — the Docker Compose / `docker run` quick starts point this at the Qdrant container for you |
+| `QDRANT_COLLECTION` | `knowledge_base` | Collection name — only matters if one Qdrant instance serves more than one deployment |
 | `EMBEDDING_MODEL` | `intfloat/multilingual-e5-base` | Sentence embedding model (restart to change) |
+| `RERANKER_MODEL` | `BAAI/bge-reranker-v2-m3` | Cross-encoder reranker model — only loaded if the reranker is turned on in Settings → Search (restart to change) |
 | `ADMIN_PASSWORD` | — | Password for the admin panel — change this before going live |
 | `SESSION_SECRET` | — | Signs session cookies — generate a random value, don't reuse it |
 | `SESSION_COOKIE_NAME` | `session` | Only matters if you run more than one instance on the same domain |
+| `SESSION_COOKIE_PATH` | `/kb-agent` | Cookie path — set to `/` if you're not running behind a reverse proxy that mounts the app under a subpath |
+| `SESSION_COOKIE_HTTPS_ONLY` | `1` | Set to `0` for a plain-HTTP local/dev setup — a browser silently drops HTTPS-only cookies over HTTP |
 | `ENCRYPTION_KEY` | *(empty)* | Optional key to encrypt stored API keys/tokens at rest |
 | `DOMAIN` | `:80` | Docker Compose only — site address for the Caddy service (real domain = automatic HTTPS) |
 
@@ -157,6 +191,8 @@ kb-agent-v2/
 ├── Dockerfile
 ├── docker-compose.yml      # app + Caddy, one command, automatic HTTPS
 ├── .env.example            # infrastructure only — no API keys
+├── docs/
+│   └── architecture.svg   # the diagram above
 ├── deploy/
 │   └── kb-agent-v2.service # systemd unit, for a non-Docker setup
 ├── caddy/
@@ -173,7 +209,9 @@ kb-agent-v2/
     ├── claude_client.py / openai_client.py / gigachat_client.py  # AI providers
     ├── export.py            # Excel report (admin: /admin/export.xlsx)
     ├── charts.py            # inline SVG chart geometry for the Analytics dashboard
-    ├── rag.py / ingest.py / embeddings.py / vectorstore.py / db.py
+    ├── rag.py                # search -> hybrid RRF fusion -> optional reranker -> LLM
+    ├── reranker.py           # cross-encoder reranking (optional, see Settings → Search)
+    ├── ingest.py / embeddings.py / vectorstore.py / db.py
     └── templates/           # admin UI pages
 ```
 
@@ -187,6 +225,11 @@ This is meant to run on a server you control, behind HTTPS. Set a real `ADMIN_PA
 ## Русский
 
 > Если честно — я просто устал смотреть, как саппорт даёт три разных ответа на один и тот же вопрос. И дело не в том, что кто-то ленился — правильный ответ реально лежал в каком-то PDF-е, который никто не открывал с момента, как его написали. Вот и сделал то, чего самому не хватало: скармливаешь агенту документы, и вместо папки, которую надо *перерывать*, получаешь то, у чего можно просто... взять и спросить.
+
+<figure>
+<img src="docs/architecture.svg" alt="Диаграмма: каналы отправляют вопрос или документ в FastAPI-сервис. Документы режутся на куски и индексируются в Qdrant (векторы) и SQLite FTS5 (полнотекстовый поиск); вопрос ищется в обоих сразу, результаты объединяются RRF-фьюжном, уточняются опциональным кросс-энкодер реранкером, передаются в LLM с автоматическим фоллбэком между провайдерами, и ответ возвращается в тот канал, откуда пришёл вопрос.">
+<figcaption align="center"><sub>Как вопрос становится ответом — поиск гибридный (вектор + BM25, объединены RRF), результат уточняется реранкером, и уже потом уходит в выбранного LLM-провайдера.</sub></figcaption>
+</figure>
 
 ### Кому это пригодится
 
@@ -234,7 +277,26 @@ Telegram и WhatsApp тут новенькие, поэтому пока попр
 
 ### Технически
 
-FastAPI, встроенный Qdrant для векторного поиска (без отдельного сервера — просто файлы на диске), мультиязычные эмбеддинги `e5`, SQLite для метаданных и полнотекстового поиска, Tesseract для OCR. Ничего экзотического — стек собран так, чтобы для запуска не нужна была отдельная DevOps-команда.
+**Поиск** — как вопрос находит нужный кусок текста:
+- **Гибридный поиск** — векторный поиск (смысловая близость) и лексический BM25-поиск (SQLite FTS5) работают независимо друг от друга, а потом объединяются через **Reciprocal Rank Fusion**. Это не мелочь: кусок с точным совпадением — код ошибки, номер версии, название модели — может ранжироваться низко по смыслу и вообще не попасть в топ вектора. Объединение двух независимых списков результатов означает, что сильное лексическое совпадение всплывёт, даже если эмбеддинг сам по себе его бы никогда не нашёл.
+- **Кросс-энкодер реранкер** (опционально, по умолчанию выключен) — вектор и BM25 оценивают кусок относительно вопроса каждый по отдельности; реранкер читает вопрос и кусок ВМЕСТЕ, за один проход — ранжирует точнее, но ценой прохода модели на процессоре на каждого кандидата. Работает только над узким пулом, который уже отобрал гибридный поиск, не над всей базой. Включается во вкладке Настройки → Поиск.
+- Буст приоритетных файлов (★) и фильтр «не путать похожие темы» — например, чтобы вопрос про возврат в одной кассовой системе не собрал ответ из документации другой кассы.
+
+**Всё остальное:**
+
+| Слой | Что там работает |
+|---|---|
+| Веб / API | FastAPI, Uvicorn, серверный рендеринг админки на Jinja2 (без отдельной сборки фронтенда) |
+| Векторный поиск | Qdrant — отдельный процесс (в Docker Compose поднимается как сайдкар; при запуске без Docker ожидается уже запущенным) |
+| Метаданные, полнотекстовый поиск, настройки | SQLite — реестр файлов, лог вопросов, FTS5 для лексического поиска, зашифрованное хранилище ключей |
+| Эмбеддинги и реранкинг | `sentence-transformers` на CPU — `intfloat/multilingual-e5-base` для эмбеддингов, `BAAI/bge-reranker-v2-m3` для реранкинга (обе меняются только перезапуском) |
+| LLM-провайдеры | Anthropic Claude, OpenAI, DeepSeek, GigaChat (Сбер) — выбираются на лету, с автоматическим фоллбэком, если у основного нет ключа или он ответил ошибкой |
+| Разбор документов | `pypdf`, `python-docx`, `openpyxl`, PyYAML, Pillow + Tesseract OCR (русский и английский) |
+| Отчёты | `openpyxl` — оформленный `.xlsx`-экспорт с фильтрами прямо из админки |
+| Секреты | `cryptography` (Fernet) — шифрует хранимые ключи/токены провайдеров, если задан `ENCRYPTION_KEY` |
+| Деплой | Docker + Docker Compose, Caddy для автоматического HTTPS, либо обычный systemd без Docker |
+
+Ничего экзотического — стек собран так, чтобы для запуска не нужна была отдельная DevOps-команда.
 
 ### Быстрый старт (Docker Compose + HTTPS)
 
@@ -252,17 +314,22 @@ docker compose up -d --build
 
 ### Быстрый старт (Docker, без Caddy)
 
-Хотите сами разобраться с TLS или запускаете за уже существующим реверс-прокси?
+Хотите сами разобраться с TLS или запускаете за уже существующим реверс-прокси? Векторному поиску нужен доступный по `QDRANT_URL` инстанс Qdrant — команда ниже поднимает его рядом с приложением в общей Docker-сети:
 
 ```bash
 git clone https://github.com/Krauzersan/kb-agent-v2.git
 cd kb-agent-v2
 cp .env.example .env      # обязательно поменяйте ADMIN_PASSWORD
 
+docker network create kb-agent-net
+docker run -d --name kb-agent-qdrant --network kb-agent-net -v kb-agent-qdrant:/qdrant/storage qdrant/qdrant:latest
+
 docker build -t kb-agent-v2 .
 docker run -d \
   --name kb-agent-v2 \
+  --network kb-agent-net \
   --env-file .env \
+  -e QDRANT_URL=http://kb-agent-qdrant:6333 \
   -p 8746:8746 \
   -v kb-agent-data:/data \
   kb-agent-v2
@@ -272,7 +339,7 @@ docker run -d \
 
 ### Быстрый старт (без Docker)
 
-Если хотите запускать напрямую на Linux-сервере через systemd:
+Если хотите запускать напрямую на Linux-сервере через systemd. Понадобится ещё и запущенный Qdrant — см. [его собственный быстрый старт](https://qdrant.tech/documentation/quickstart/) — `QDRANT_URL` в `.env` по умолчанию `http://127.0.0.1:6333`, так что проще всего запустить его на этой же машине:
 
 ```bash
 python3 -m venv venv
@@ -284,7 +351,7 @@ cp .env.example .env      # поменяйте ADMIN_PASSWORD, сгенерир�
 venv/bin/uvicorn main:app --app-dir app --host 0.0.0.0 --port 8746
 ```
 
-Либо пропустите ручные шаги и запустите `sudo bash deploy/install.sh` из корня репозитория — он сделает всё сам и поставит `kb-agent-v2` как systemd-сервис.
+Либо пропустите ручные шаги и запустите `sudo bash deploy/install.sh` из корня репозитория — он поставит всё вышеперечисленное как systemd-сервис (сам Qdrant install.sh не ставит — разверните его отдельно заранее).
 
 <a id="подключение-мессенджеров"></a>
 ### Подключение мессенджеров
@@ -314,10 +381,15 @@ venv/bin/uvicorn main:app --app-dir app --host 0.0.0.0 --port 8746
 |---|---|---|
 | `PORT` | `8746` | Порт, на котором слушает сервис |
 | `DATA_DIR` | `./data` | Где лежат база знаний, БД, векторный индекс и кэш модели |
+| `QDRANT_URL` | `http://127.0.0.1:6333` | Где искать Qdrant — быстрые старты через Docker Compose / `docker run` уже указывают сюда адрес контейнера с Qdrant |
+| `QDRANT_COLLECTION` | `knowledge_base` | Имя коллекции — важно, только если один Qdrant обслуживает больше одного деплоя |
 | `EMBEDDING_MODEL` | `intfloat/multilingual-e5-base` | Модель эмбеддингов (меняется только перезапуском) |
+| `RERANKER_MODEL` | `BAAI/bge-reranker-v2-m3` | Модель кросс-энкодер реранкера — загружается, только если реранкер включён в Настройки → Поиск (меняется только перезапуском) |
 | `ADMIN_PASSWORD` | — | Пароль админ-панели — поменяйте перед запуском в прод |
 | `SESSION_SECRET` | — | Подписывает сессионные куки — сгенерируйте случайное значение |
 | `SESSION_COOKIE_NAME` | `session` | Важно только если на одном домене крутится несколько копий |
+| `SESSION_COOKIE_PATH` | `/kb-agent` | Путь куки — поставьте `/`, если сервис не стоит за реверс-прокси, монтирующим его в подпуть |
+| `SESSION_COOKIE_HTTPS_ONLY` | `1` | Поставьте `0` для локального запуска по обычному HTTP — иначе браузер тихо не сохранит куку без HTTPS |
 | `ENCRYPTION_KEY` | *(пусто)* | Опциональный ключ для шифрования хранимых ключей/токенов |
 | `DOMAIN` | `:80` | Только для Docker Compose — адрес сайта для сервиса Caddy (настоящий домен = HTTPS автоматически) |
 
@@ -328,6 +400,8 @@ kb-agent-v2/
 ├── Dockerfile
 ├── docker-compose.yml      # приложение + Caddy, одна команда, HTTPS сам собой
 ├── .env.example            # только инфраструктура — без API-ключей
+├── docs/
+│   └── architecture.svg   # диаграмма выше
 ├── deploy/
 │   └── kb-agent-v2.service # systemd-юнит для запуска без Docker
 ├── caddy/
@@ -344,7 +418,9 @@ kb-agent-v2/
     ├── claude_client.py / openai_client.py / gigachat_client.py  # AI-провайдеры
     ├── export.py            # Excel-отчёт (админка: /admin/export.xlsx)
     ├── charts.py            # геометрия inline SVG-графиков для дашборда «Аналитика»
-    ├── rag.py / ingest.py / embeddings.py / vectorstore.py / db.py
+    ├── rag.py                # поиск -> гибридный RRF-фьюжн -> опц. реранкер -> LLM
+    ├── reranker.py           # кросс-энкодер реранкинг (опционально, см. Настройки → Поиск)
+    ├── ingest.py / embeddings.py / vectorstore.py / db.py
     └── templates/           # страницы админки
 ```
 

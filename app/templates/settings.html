@@ -291,6 +291,15 @@
         <span class="hint">Реальные значения близости видно на странице «Тест агента».</span>
       </div>
       <div class="field">
+        <label>Реранкер (уточняет порядок найденного)<span class="help">?<span class="tip">После обычного поиска (вектор + BM25) отдельная модель ещё раз пересматривает найденные куски, читая вопрос и кусок ВМЕСТЕ — точнее, чем обычное ранжирование, но каждый вопрос обрабатывается на секунду-две дольше (модель считает на процессоре).</span></span></label>
+        <input type="hidden" name="reranker_enabled" id="rerankerVal" value="{{ 'true' if s.reranker_enabled else 'false' }}">
+        <div class="seg" id="rerankerSeg">
+          <button type="button" data-v="false">Выкл</button>
+          <button type="button" data-v="true">Вкл</button>
+        </div>
+        <span class="hint">Если включить и модель ещё не загружалась — первый вопрос после сохранения ответит заметно дольше (модель грузится в память один раз).</span>
+      </div>
+      <div class="field">
         <label>Ответ на вопросы «перечисли все / список всех»<span class="help">?<span class="tip">Обычный поиск отдаёт несколько похожих кусков текста — этого достаточно для точечного вопроса, но не для вопроса, ответ на который размазан по многим файлам (например «какие есть кассовые ПО» — у каждой кассы свой файл). Для таких вопросов агент автоматически переключается на один из двух режимов ниже.</span></span></label>
         <input type="hidden" name="search_mode" id="searchModeVal" value="{{ s.search_mode }}">
         <div class="seg" id="searchModeSeg">
@@ -586,6 +595,22 @@
       });
     });
     var cur = val.value || 'auto';
+    var active = btns.filter(function(b){ return b.dataset.v === cur; })[0] || btns[0];
+    active.classList.add('active');
+  })();
+
+  // Реранкер вкл/выкл
+  (function(){
+    var seg = document.getElementById('rerankerSeg'), val = document.getElementById('rerankerVal');
+    if(!seg || !val) return;
+    var btns = [].slice.call(seg.querySelectorAll('button'));
+    btns.forEach(function(b){
+      b.addEventListener('click', function(){
+        val.value = b.dataset.v;
+        btns.forEach(function(x){ x.classList.toggle('active', x === b); });
+      });
+    });
+    var cur = val.value || 'false';
     var active = btns.filter(function(b){ return b.dataset.v === cur; })[0] || btns[0];
     active.classList.add('active');
   })();

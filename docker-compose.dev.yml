@@ -1,0 +1,29 @@
+# Локальный dev-стенд на Маке: без Caddy/HTTPS, порт торчит прямо наружу.
+#   docker compose -f docker-compose.dev.yml up -d --build
+# База знаний (только сами файлы) кладётся в ./dev-import — она подключается в
+# контейнер как /import:ro, дальше её один раз индексируешь через
+# admin -> Обслуживание -> «Массовая загрузка из папки на сервере» с путём /import.
+services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    restart: unless-stopped
+    volumes:
+      - kb-agent-dev-qdrant:/qdrant/storage
+
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env.dev
+    environment:
+      - QDRANT_URL=http://qdrant:6333
+    depends_on:
+      - qdrant
+    ports:
+      - "8746:8746"
+    volumes:
+      - kb-agent-dev-data:/data
+      - ./dev-import:/import:ro
+
+volumes:
+  kb-agent-dev-data:
+  kb-agent-dev-qdrant:

@@ -25,6 +25,11 @@ class Settings:
     CHUNK_SIZE: int = int(os.getenv("CHUNK_SIZE", "900"))
     CHUNK_OVERLAP: int = int(os.getenv("CHUNK_OVERLAP", "150"))
 
+    # Кросс-энкодер реранкер (см. reranker.py). Многоязычная модель — база на русском.
+    # Включается/выключается на лету в настройках (reranker_enabled), а вот САМА модель —
+    # только через рестарт (загружается в память один раз, как EMBEDDING_MODEL).
+    RERANKER_MODEL: str = os.getenv("RERANKER_MODEL", "BAAI/bge-reranker-v2-m3")
+
     # Админ-панель (это НЕ api-ключи — нужны для самого входа, поэтому в env)
     ADMIN_PASSWORD: str = os.getenv("ADMIN_PASSWORD", "admin")
     SESSION_SECRET: str = os.getenv("SESSION_SECRET", "change-me")
@@ -33,6 +38,11 @@ class Settings:
     # общая на весь домен (порт в ней не участвует) и вход в одну копию разлогинивает
     # другую (кука перезаписывается чужим secret'ом, который не расшифровать).
     SESSION_COOKIE_NAME: str = os.getenv("SESSION_COOKIE_NAME", "session")
+    # Путь и https-only куки сессии — по умолчанию как в проде (за nginx на
+    # /kb-agent/, только HTTPS). Для локального dev-стенда без префикса и без
+    # TLS переопределяются в .env.dev, иначе браузер тихо не сохранит куку.
+    SESSION_COOKIE_PATH: str = os.getenv("SESSION_COOKIE_PATH", "/kb-agent")
+    SESSION_COOKIE_HTTPS_ONLY: bool = os.getenv("SESSION_COOKIE_HTTPS_ONLY", "1") == "1"
     # Ключ шифрования секретов в settings_store (API-ключи, токены) — отдельный от
     # SESSION_SECRET намеренно (разные назначения, компрометация одного не должна
     # автоматически компрометировать другой). Пусто = секреты хранятся как раньше,

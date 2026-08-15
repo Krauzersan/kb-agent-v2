@@ -324,8 +324,14 @@ _FTS_TOKEN_RE = re.compile(r"\w+", re.UNICODE)
 
 
 def search_fts(query: str, limit: int = 50) -> list:
-    """Лексический (BM25) поиск по кускам. Возвращает [{file_id, chunk_index, rank}] —
-    rank это bm25() SQLite: чем МЕНЬШЕ (отрицательнее), тем релевантнее.
+    """Лексический (BM25) поиск по кускам. Возвращает [{file_id, chunk_index, text,
+    filename, rank}] в порядке релевантности (лучшие первые) — rank это bm25() SQLite:
+    чем МЕНЬШЕ (отрицательнее), тем релевантнее.
+
+    text/filename отдаём сразу (JOIN на files) — кандидаты отсюда могут пойти в контекст
+    модели НАПРЯМУЮ, даже если векторный поиск их вообще не нашёл (см. rag._rrf_fuse):
+    раньше BM25 использовался только чтобы дорасчитать скор уже найденным вектором
+    кускам, теперь это самостоятельный источник кандидатов.
 
     Токенизируем запрос вручную и склеиваем через OR — так избегаем проблем с
     FTS5-синтаксисом в сыром пользовательском вопросе (кавычки, дефисы, звёздочки
@@ -338,13 +344,16 @@ def search_fts(query: str, limit: int = 50) -> list:
     with _lock, _conn() as con:
         try:
             rows = con.execute(
-                "SELECT file_id, chunk_index, bm25(chunks_fts) AS rank FROM chunks_fts "
+                "SELECT cf.file_id AS file_id, cf.chunk_index AS chunk_index, "
+                "cf.text AS text, f.filename AS filename, bm25(chunks_fts) AS rank "
+                "FROM chunks_fts cf JOIN files f ON f.id = cf.file_id "
                 "WHERE chunks_fts MATCH ? ORDER BY rank LIMIT ?",
                 (match_q, limit),
             ).fetchall()
         except sqlite3.OperationalError:
             return []
     return [{"file_id": int(r["file_id"]), "chunk_index": int(r["chunk_index"]),
+              "text": r["text"] or "", "filename": r["filename"] or "",
               "rank": float(r["rank"])} for r in rows]
 
 

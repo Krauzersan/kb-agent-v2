@@ -7,6 +7,7 @@ import re
 import db
 import llm
 import mapreduce
+import reranker
 import settings_store
 import vectorstore
 
@@ -129,39 +130,47 @@ def _search_query(question: str, history) -> str:
     return " ".join(recent_user + [question])
 
 
-def _hybrid_rerank(cand: list, query: str) -> None:
-    """Смешивает вектор-скор с лексическим BM25 (SQLite FTS5) — в пределах уже найденных
-    вектором кандидатов, без похода за новыми (дёшево по CPU/RAM на текущем железе).
+_RRF_K = 60  # стандартная константа RRF: чем больше, тем меньше давят позиции внизу списка
 
-    Эмбеддинг семантически близкие куски находит хорошо, но точное совпадение — код
-    ошибки, номер версии, название кассы — иногда ранжирует ниже, чем смысловая
-    близость. BM25 по тем же кандидатам это компенсирует. Пишем результат в h["hybrid"];
-    h["score"] (косинус) не трогаем — от него зависит min_relevance и отображение в UI.
-    Если для кандидата нет лексического индекса (файл ещё не бэкфилнут в chunks_fts) —
-    просто нормализованный вектор-скор, без просадки.
+
+def _rrf_fuse(vector_hits: list, bm25_hits: list) -> list:
+    """Reciprocal Rank Fusion двух НЕЗАВИСИМЫХ списков кандидатов — вектор и BM25 ищут
+    каждый сам по себе, а не «BM25-рескор уже найденных вектором» (как было раньше).
+
+    Разница принципиальна: кусок с точным лексическим совпадением (код ошибки, номер
+    версии, название кассы), которого эмбеддинг вообще не занёс в top-N (а не просто
+    ранжировал ниже) — раньше терялся безвозвратно, потому что BM25 умел только
+    досчитать скор уже отобранным вектором кандидатам. Теперь BM25-топ — самостоятельный
+    источник кандидатов, и такой кусок всё равно попадёт в объединённый пул.
+
+    Фьюзим по РАНГАМ (не сырым скорам — косинус и bm25() в разных шкалах и не сравнимы
+    напрямую): кандидат получает 1/(k + позиция + 1) от каждого списка, где он
+    встретился; если он есть только в одном — считаем от одного. Итоговый rrf
+    min-max-нормализуем в h["hybrid"], чтобы priority_boost (см. _search_with_priority)
+    остался тем же мягким слагаемым на сравнимой шкале, что и раньше.
     """
+    merged: dict = {}
+    for rank, h in enumerate(vector_hits):
+        key = (h.get("file_id"), h.get("chunk_index"))
+        entry = merged.setdefault(key, dict(h))
+        entry["rrf"] = entry.get("rrf", 0.0) + 1.0 / (_RRF_K + rank + 1)
+    for rank, h in enumerate(bm25_hits):
+        key = (h.get("file_id"), h.get("chunk_index"))
+        entry = merged.get(key)
+        if entry is None:
+            entry = dict(h)  # найден ТОЛЬКО лексически — вектором вообще не отобран
+            merged[key] = entry
+        entry["rrf"] = entry.get("rrf", 0.0) + 1.0 / (_RRF_K + rank + 1)
+
+    cand = list(merged.values())
     if not cand:
-        return
-    scores = [h["score"] for h in cand]
-    lo, hi = min(scores), max(scores)
-    vspan = (hi - lo) or 1.0
-
-    bm25_rows = db.search_fts(query, limit=max(len(cand) * 2, 30))
-    bm25_map = {}
-    if bm25_rows:
-        ranks = [r["rank"] for r in bm25_rows]   # bm25(): чем меньше — тем релевантнее
-        blo, bhi = min(ranks), max(ranks)
-        bspan = (bhi - blo) or 1.0
-        for r in bm25_rows:
-            bm25_map[(r["file_id"], r["chunk_index"])] = (bhi - r["rank"]) / bspan
-
+        return cand
+    rrf_scores = [h["rrf"] for h in cand]
+    lo, hi = min(rrf_scores), max(rrf_scores)
+    span = (hi - lo) or 1.0
     for h in cand:
-        vnorm = (h["score"] - lo) / vspan
-        if bm25_map:
-            bnorm = bm25_map.get((h.get("file_id"), h.get("chunk_index")), 0.0)
-            h["hybrid"] = 0.7 * vnorm + 0.3 * bnorm
-        else:
-            h["hybrid"] = vnorm
+        h["hybrid"] = (h["rrf"] - lo) / span
+    return cand
 
 
 def _search_with_priority(question: str, top_k: int) -> list:
@@ -178,15 +187,36 @@ def _search_with_priority(question: str, top_k: int) -> list:
         boost = 0.05
 
     # Берём пул пошире top_k, чтобы после фильтра «чужих» кассовых систем всё равно
-    # осталось из чего набрать top_k релевантных кусков.
+    # осталось из чего набрать top_k релевантных кусков. Вектор и BM25 ищут НЕЗАВИСИМО
+    # (см. _rrf_fuse) — фильтр систем применяем уже к объединению обоих, не только
+    # к вектору, иначе лексический кандидат из «чужой» кассы проскочит мимо фильтра.
     pool = max(top_k * 3, 15)
-    cand = vectorstore.search(question, top_k=pool)
+    vec_hits = vectorstore.search(question, top_k=pool)
+    bm25_hits = db.search_fts(question, limit=pool)
+    cand = _rrf_fuse(vec_hits, bm25_hits)
     cand = _filter_cross_system_hits(cand, question)
-    _hybrid_rerank(cand, question)
+
+    # Кросс-энкодер реранкер (опционально, см. reranker.py) — точнее RRF, потому что
+    # видит вопрос и кусок ВМЕСТЕ, а не как два независимых сигнала. Считаем relevance
+    # только для уже отобранного узкого пула (cand), не для всей базы. Если выключен
+    # или упал (модель не скачалась, память и т.п.) — используем RRF-скор как есть,
+    # деградация мягкая, без потери ответа.
+    if cand and settings_store.get("reranker_enabled"):
+        try:
+            scores = reranker.score(question, [h.get("text") or "" for h in cand])
+            for h, s in zip(cand, scores):
+                h["rerank"] = s
+        except Exception:
+            log.exception("Реранкер упал — используем RRF-скор без него")
+            for h in cand:
+                h["rerank"] = h["hybrid"]
+    else:
+        for h in cand:
+            h["rerank"] = h["hybrid"]
 
     for h in cand:
         h["priority"] = 1 if h.get("file_id") in prio_ids else 0
-        h["rank"] = h["hybrid"] + (boost if (h["priority"] and boost > 0) else 0)
+        h["rank"] = h["rerank"] + (boost if (h["priority"] and boost > 0) else 0)
     cand.sort(key=lambda h: h["rank"], reverse=True)
     top = cand[:top_k]
     if prio_ids and boost > 0:

@@ -28,7 +28,7 @@ app = FastAPI(title="KB Agent", docs_url=None, redoc_url=None)
 app.add_middleware(SessionMiddleware, secret_key=settings.SESSION_SECRET,
                    session_cookie=settings.SESSION_COOKIE_NAME,
                    max_age=60 * 60 * 12,  # сессия живёт 12 часов
-                   path="/kb-agent", https_only=True)
+                   path=settings.SESSION_COOKIE_PATH, https_only=settings.SESSION_COOKIE_HTTPS_ONLY)
 
 app.include_router(admin.router)
 app.include_router(webhook.router)

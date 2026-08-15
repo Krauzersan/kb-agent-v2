@@ -5,10 +5,20 @@
 # .env.example. The app container isn't published to the host on purpose: Caddy is
 # the only way in, terminates TLS, and forwards over the compose network.
 services:
+  qdrant:
+    image: qdrant/qdrant:latest
+    restart: unless-stopped
+    volumes:
+      - qdrant-data:/qdrant/storage
+
   app:
     build: .
     restart: unless-stopped
     env_file: .env
+    environment:
+      - QDRANT_URL=http://qdrant:6333
+    depends_on:
+      - qdrant
     volumes:
       - kb-agent-data:/data
     healthcheck:
@@ -34,5 +44,6 @@ services:
 
 volumes:
   kb-agent-data:
+  qdrant-data:
   caddy-data:
   caddy-config:
