@@ -95,11 +95,10 @@ Telegram and WhatsApp are newer here, so they're still a bit more basic: plain t
 **Retrieval** — how a question finds the right chunk:
 - **Hybrid search** — a vector search (semantic similarity) and a BM25 lexical search (SQLite FTS5) run independently, then get combined with **Reciprocal Rank Fusion**. This matters more than it sounds: a chunk with an exact match — an error code, a version number, a product name — can rank low semantically and never make it into a pure vector top-N. Fusing two independent result lists means a strong lexical hit surfaces even when the embedding never would have found it on its own.
 - **Cross-encoder reranker** (optional, off by default) — vector and BM25 each score a chunk against the question in isolation; a reranker reads the question *and* the chunk together in one pass, which ranks more accurately at the cost of a CPU pass per candidate. Runs only over the narrow pool hybrid search already picked, not the whole base. Toggle it in Settings → Search.
-
-  > [!WARNING]
-  > CPU-only, no batching, and it scores the *whole* hybrid pool (`top_k × 3`, or more) on every question. `BAAI/bge-reranker-v2-m3` alone needs a good chunk of a GB resident in memory, and scoring dozens of real-length chunks on a small/shared box can take well over a minute — past most reverse-proxy timeouts. Fine on a machine with a few dedicated CPU cores and 4 GB+ RAM to spare; leave it off on a cramped VPS.
-
 - Priority boost for files marked ★, and a same-topic filter so, say, a question about one POS system's refund flow doesn't get an answer built from a different POS system's docs.
+
+> [!WARNING]
+> The reranker is CPU-only, no batching, and scores the *whole* hybrid pool (`top_k × 3`, or more) on every question. `BAAI/bge-reranker-v2-m3` alone needs a good chunk of a GB resident in memory, and scoring dozens of real-length chunks on a small/shared box can take well over a minute — past most reverse-proxy timeouts. Fine on a machine with a few dedicated CPU cores and 4 GB+ RAM to spare; leave it off on a cramped VPS.
 
 **Everything else:**
 
@@ -337,11 +336,10 @@ Telegram и WhatsApp тут новенькие, поэтому пока попр
 **Поиск** — как вопрос находит нужный кусок текста:
 - **Гибридный поиск** — векторный поиск (смысловая близость) и лексический BM25-поиск (SQLite FTS5) работают независимо друг от друга, а потом объединяются через **Reciprocal Rank Fusion**. Это не мелочь: кусок с точным совпадением — код ошибки, номер версии, название модели — может ранжироваться низко по смыслу и вообще не попасть в топ вектора. Объединение двух независимых списков результатов означает, что сильное лексическое совпадение всплывёт, даже если эмбеддинг сам по себе его бы никогда не нашёл.
 - **Кросс-энкодер реранкер** (опционально, по умолчанию выключен) — вектор и BM25 оценивают кусок относительно вопроса каждый по отдельности; реранкер читает вопрос и кусок ВМЕСТЕ, за один проход — ранжирует точнее, но ценой прохода модели на процессоре на каждого кандидата. Работает только над узким пулом, который уже отобрал гибридный поиск, не над всей базой. Включается во вкладке Настройки → Поиск.
-
-  > [!WARNING]
-  > Считает только на CPU, без батчинга, и оценивает весь пул гибридного поиска (`top_k × 3` и больше) на каждый вопрос. Одна только `BAAI/bge-reranker-v2-m3` резидентно держит в памяти около гигабайта, а прогон нескольких десятков кусков реального размера на маленьком/общем сервере может занять больше минуты — дольше таймаута большинства реверс-прокси. Нормально на машине с несколькими выделенными ядрами и запасом 4+ ГБ RAM; на тесном VPS лучше оставить выключенным.
-
 - Буст приоритетных файлов (★) и фильтр «не путать похожие темы» — например, чтобы вопрос про возврат в одной кассовой системе не собрал ответ из документации другой кассы.
+
+> [!WARNING]
+> Реранкер считает только на CPU, без батчинга, и оценивает весь пул гибридного поиска (`top_k × 3` и больше) на каждый вопрос. Одна только `BAAI/bge-reranker-v2-m3` резидентно держит в памяти около гигабайта, а прогон нескольких десятков кусков реального размера на маленьком/общем сервере может занять больше минуты — дольше таймаута большинства реверс-прокси. Нормально на машине с несколькими выделенными ядрами и запасом 4+ ГБ RAM; на тесном VPS лучше оставить выключенным.
 
 **Всё остальное:**
 
