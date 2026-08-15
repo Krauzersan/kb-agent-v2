@@ -1,4 +1,4 @@
-<h1 align="center">KB Agent</h1>
+<h1 align="center">RAG Agent</h1>
 <p align="center"><em>Dump your docs in, get a bot that actually knows what it's talking about.</em></p>
 
 <p align="center">
@@ -9,8 +9,8 @@
   <img alt="Hybrid search" src="https://img.shields.io/badge/search-vector%20%2B%20BM25%20%2B%20RRF-F5A623">
   <img alt="Self-hosted" src="https://img.shields.io/badge/self--hosted-your%20server%2C%20your%20data-6E56CF">
   <br>
-  <img alt="Last commit" src="https://img.shields.io/github/last-commit/Krauzersan/kb-agent-v2?color=blue">
-  <img alt="Stars" src="https://img.shields.io/github/stars/Krauzersan/kb-agent-v2?style=flat&color=yellow">
+  <img alt="Last commit" src="https://img.shields.io/github/last-commit/Krauzersan/rag-agent?color=blue">
+  <img alt="Stars" src="https://img.shields.io/github/stars/Krauzersan/rag-agent?style=flat&color=yellow">
 </p>
 
 <p align="center"><a href="#english"><strong>English</strong></a> &nbsp;·&nbsp; <a href="#русский"><strong>Русский</strong></a></p>
@@ -122,8 +122,8 @@ Nothing exotic, just parts chosen so you don't need a DevOps team to run this th
 The easiest way to run this somewhere real — Caddy in front, automatic HTTPS, one command:
 
 ```bash
-git clone https://github.com/Krauzersan/kb-agent-v2.git
-cd kb-agent-v2
+git clone https://github.com/Krauzersan/rag-agent.git
+cd rag-agent
 cp .env.example .env      # edit ADMIN_PASSWORD and DOMAIN at the very least
 
 docker compose up -d --build
@@ -140,22 +140,22 @@ Prefer to handle TLS yourself, or run behind an existing reverse proxy? The comm
 > Vector search needs a Qdrant instance reachable at `QDRANT_URL` — the `docker run` for it below isn't optional, even in the "no Caddy" setup.
 
 ```bash
-git clone https://github.com/Krauzersan/kb-agent-v2.git
-cd kb-agent-v2
+git clone https://github.com/Krauzersan/rag-agent.git
+cd rag-agent
 cp .env.example .env      # then edit ADMIN_PASSWORD at the very least
 
-docker network create kb-agent-net
-docker run -d --name kb-agent-qdrant --network kb-agent-net -v kb-agent-qdrant:/qdrant/storage qdrant/qdrant:latest
+docker network create rag-agent-net
+docker run -d --name rag-agent-qdrant --network rag-agent-net -v rag-agent-qdrant:/qdrant/storage qdrant/qdrant:latest
 
-docker build -t kb-agent-v2 .
+docker build -t rag-agent .
 docker run -d \
-  --name kb-agent-v2 \
-  --network kb-agent-net \
+  --name rag-agent \
+  --network rag-agent-net \
   --env-file .env \
-  -e QDRANT_URL=http://kb-agent-qdrant:6333 \
+  -e QDRANT_URL=http://rag-agent-qdrant:6333 \
   -p 8746:8746 \
-  -v kb-agent-data:/data \
-  kb-agent-v2
+  -v rag-agent-data:/data \
+  rag-agent
 ```
 
 Open `http://localhost:8746/` and log in with the password you set. Either way — AI provider keys and integration tokens are entered later, inside the admin panel's Settings tab, never in `.env`.
@@ -223,14 +223,14 @@ Everything in `.env` is infrastructure only — ports, storage location, the adm
 ### 📁 Project layout
 
 ```
-kb-agent-v2/
+rag-agent/
 ├── Dockerfile
 ├── docker-compose.yml      # app + Caddy, one command, automatic HTTPS
 ├── .env.example            # infrastructure only — no API keys
 ├── docs/
 │   └── architecture.svg   # the diagram above
 ├── deploy/
-│   └── kb-agent-v2.service # systemd unit, for a non-Docker setup
+│   └── rag-agent.service # systemd unit, for a non-Docker setup
 ├── caddy/
 │   └── Caddyfile           # used by docker-compose.yml
 └── app/                    # the FastAPI service
@@ -363,8 +363,8 @@ Telegram и WhatsApp тут новенькие, поэтому пока попр
 Самый простой способ поднять это на реальном сервере — Caddy спереди, HTTPS сам собой, одна команда:
 
 ```bash
-git clone https://github.com/Krauzersan/kb-agent-v2.git
-cd kb-agent-v2
+git clone https://github.com/Krauzersan/rag-agent.git
+cd rag-agent
 cp .env.example .env      # поменяйте как минимум ADMIN_PASSWORD и DOMAIN
 
 docker compose up -d --build
@@ -381,22 +381,22 @@ docker compose up -d --build
 > Векторному поиску нужен доступный по `QDRANT_URL` инстанс Qdrant — `docker run` для него ниже не опционален, даже в варианте «без Caddy».
 
 ```bash
-git clone https://github.com/Krauzersan/kb-agent-v2.git
-cd kb-agent-v2
+git clone https://github.com/Krauzersan/rag-agent.git
+cd rag-agent
 cp .env.example .env      # обязательно поменяйте ADMIN_PASSWORD
 
-docker network create kb-agent-net
-docker run -d --name kb-agent-qdrant --network kb-agent-net -v kb-agent-qdrant:/qdrant/storage qdrant/qdrant:latest
+docker network create rag-agent-net
+docker run -d --name rag-agent-qdrant --network rag-agent-net -v rag-agent-qdrant:/qdrant/storage qdrant/qdrant:latest
 
-docker build -t kb-agent-v2 .
+docker build -t rag-agent .
 docker run -d \
-  --name kb-agent-v2 \
-  --network kb-agent-net \
+  --name rag-agent \
+  --network rag-agent-net \
   --env-file .env \
-  -e QDRANT_URL=http://kb-agent-qdrant:6333 \
+  -e QDRANT_URL=http://rag-agent-qdrant:6333 \
   -p 8746:8746 \
-  -v kb-agent-data:/data \
-  kb-agent-v2
+  -v rag-agent-data:/data \
+  rag-agent
 ```
 
 Откройте `http://localhost:8746/` и войдите по паролю, который задали. В обоих случаях ключи AI-провайдеров и токены интеграций вводятся позже, во вкладке «Настройки» в админке — в `.env` они не хранятся никогда.
@@ -464,14 +464,14 @@ venv/bin/uvicorn main:app --app-dir app --host 0.0.0.0 --port 8746
 ### 📁 Структура проекта
 
 ```
-kb-agent-v2/
+rag-agent/
 ├── Dockerfile
 ├── docker-compose.yml      # приложение + Caddy, одна команда, HTTPS сам собой
 ├── .env.example            # только инфраструктура — без API-ключей
 ├── docs/
 │   └── architecture.svg   # диаграмма выше
 ├── deploy/
-│   └── kb-agent-v2.service # systemd-юнит для запуска без Docker
+│   └── rag-agent.service # systemd-юнит для запуска без Docker
 ├── caddy/
 │   └── Caddyfile           # используется docker-compose.yml
 └── app/                    # сам сервис на FastAPI

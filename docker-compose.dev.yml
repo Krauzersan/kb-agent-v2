@@ -3,12 +3,14 @@
 # База знаний (только сами файлы) кладётся в ./dev-import — она подключается в
 # контейнер как /import:ro, дальше её один раз индексируешь через
 # admin -> Обслуживание -> «Массовая загрузка из папки на сервере» с путём /import.
+name: rag-agent-dev
+
 services:
   qdrant:
     image: qdrant/qdrant:latest
     restart: unless-stopped
     volumes:
-      - kb-agent-dev-qdrant:/qdrant/storage
+      - rag-agent-dev-qdrant:/qdrant/storage
 
   app:
     build: .
@@ -21,9 +23,9 @@ services:
     ports:
       - "8746:8746"
     volumes:
-      - kb-agent-dev-data:/data
+      - rag-agent-dev-data:/data
       - ./dev-import:/import:ro
 
 volumes:
-  kb-agent-dev-data:
-  kb-agent-dev-qdrant:
+  rag-agent-dev-data:
+  rag-agent-dev-qdrant:

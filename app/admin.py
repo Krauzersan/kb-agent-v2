@@ -364,7 +364,7 @@ def export_xlsx(request: Request):
         topic_stats=db.topic_stats(),
         rows=db.all_query_log_for_export(),
     )
-    filename = f"kb-agent-report-{datetime.now():%Y-%m-%d}.xlsx"
+    filename = f"rag-agent-report-{datetime.now():%Y-%m-%d}.xlsx"
     return Response(
         content=data,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",

@@ -34,13 +34,13 @@ fi
 mkdir -p "$APP_DIR/data"
 
 echo "==> [5/5] systemd service"
-sed "s|/opt/kb-agent-v2|$APP_DIR|g" "$APP_DIR/deploy/kb-agent-v2.service" > /etc/systemd/system/kb-agent-v2.service
+sed "s|/opt/rag-agent|$APP_DIR|g" "$APP_DIR/deploy/rag-agent.service" > /etc/systemd/system/rag-agent.service
 systemctl daemon-reload
-systemctl enable kb-agent-v2
-systemctl restart kb-agent-v2
+systemctl enable rag-agent
+systemctl restart rag-agent
 
 echo
 echo "Done. Service running on port 8746."
-echo "Logs:   journalctl -u kb-agent-v2 -f"
-echo "Status: systemctl status kb-agent-v2"
+echo "Logs:   journalctl -u rag-agent -f"
+echo "Status: systemctl status rag-agent"
 echo "Check:  curl http://localhost:8746/health"

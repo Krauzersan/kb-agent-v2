@@ -24,7 +24,7 @@ logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("app")
 
-app = FastAPI(title="KB Agent", docs_url=None, redoc_url=None)
+app = FastAPI(title="RAG Agent", docs_url=None, redoc_url=None)
 app.add_middleware(SessionMiddleware, secret_key=settings.SESSION_SECRET,
                    session_cookie=settings.SESSION_COOKIE_NAME,
                    max_age=60 * 60 * 12,  # сессия живёт 12 часов
