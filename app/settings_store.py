@@ -202,6 +202,10 @@ def _conn():
     os.makedirs(cfg.DATA_DIR_ABS, exist_ok=True)
     con = sqlite3.connect(cfg.DB_PATH, timeout=30)
     con.row_factory = sqlite3.Row
+    # WAL — тот же файл БД, что и db.py, оба модуля открывают свои соединения;
+    # см. комментарий в db.py._conn для почему.
+    con.execute("PRAGMA journal_mode=WAL")
+    con.execute("PRAGMA busy_timeout=30000")
     try:
         yield con
         con.commit()
@@ -228,15 +232,28 @@ def _cast(key: str, raw: str):
     return raw
 
 
+# get() дёргается по несколько раз за один ответ (top_k, priority_boost, min_relevance,
+# reranker_enabled, search_mode, провайдер...) — открывать под это новое sqlite-соединение
+# каждый раз накладно. Настройки меняются только через set_value (админка), поэтому
+# простой in-process кэш с точечной инвалидацией на запись безопасен и не требует TTL.
+_cache: dict = {}
+
+
 def get(key: str):
-    with _lock, _conn() as con:
-        row = con.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
-    if row is None or row["value"] is None or row["value"] == "":
-        return DEFAULTS.get(key, "")
-    raw = row["value"]
-    if key in SECRET_KEYS:
-        raw = _decrypt(raw)
-    return _cast(key, raw)
+    with _lock:
+        if key in _cache:
+            return _cache[key]
+        with _conn() as con:
+            row = con.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+        if row is None or row["value"] is None or row["value"] == "":
+            result = DEFAULTS.get(key, "")
+        else:
+            raw = row["value"]
+            if key in SECRET_KEYS:
+                raw = _decrypt(raw)
+            result = _cast(key, raw)
+        _cache[key] = result
+        return result
 
 
 def set_value(key: str, value) -> None:
@@ -245,12 +262,14 @@ def set_value(key: str, value) -> None:
     value = str(value)
     if key in SECRET_KEYS:
         value = _encrypt(value)
-    with _lock, _conn() as con:
-        con.execute(
-            "INSERT INTO settings (key, value) VALUES (?, ?) "
-            "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-            (key, value),
-        )
+    with _lock:
+        with _conn() as con:
+            con.execute(
+                "INSERT INTO settings (key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, value),
+            )
+        _cache.pop(key, None)
 
 
 def is_set(key: str) -> bool:

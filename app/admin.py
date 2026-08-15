@@ -1404,7 +1404,10 @@ def _backfill_fts() -> None:
                     text = ingest.extract_text(rec["stored_path"])
                 chunks = ingest.chunk_text(text)
                 if chunks:
-                    db.index_chunks_fts(fid, chunks)
+                    # тот же заголовок, что подмешивается перед эмбеддингом — см. ingest.py
+                    title = vectorstore.embedding_title(rec["filename"])
+                    fts_chunks = [f"{title}\n\n{c}" if title else c for c in chunks]
+                    db.index_chunks_fts(fid, fts_chunks)
                     done += 1
                 else:
                     errors += 1

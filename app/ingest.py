@@ -415,7 +415,14 @@ def ingest_file(file_id: int, skip_summary: bool = False) -> None:
             db.set_status(file_id, "error", chunks=0,
                           error="Не удалось извлечь текст (пустой файл или нераспознан).")
         else:
-            db.index_chunks_fts(file_id, chunks)   # лексический индекс — для гибридного поиска
+            # Лексический индекс — для гибридного поиска. Заголовок подмешиваем ТЕМ ЖЕ
+            # способом, что и перед эмбеддингом (vectorstore.add_chunks), иначе BM25 не
+            # видит расплывчатый вопрос про ТЕМУ файла так же хорошо, как вектор: слово
+            # из заголовка может вообще не встречаться в теле куска. Сам кусок (что видит
+            # модель) в Qdrant остаётся без заголовка — он тут только для матчинга.
+            title = vectorstore.embedding_title(rec["filename"])
+            fts_chunks = [f"{title}\n\n{c}" if title else c for c in chunks]
+            db.index_chunks_fts(file_id, fts_chunks)
             db.set_status(file_id, "ready", chunks=n, error=None)
             if skip_summary:
                 return

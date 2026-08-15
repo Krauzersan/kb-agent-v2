@@ -21,6 +21,13 @@ def _conn():
     os.makedirs(settings.DATA_DIR_ABS, exist_ok=True)
     con = sqlite3.connect(settings.DB_PATH, timeout=30)
     con.row_factory = sqlite3.Row
+    # WAL: писатель (индексация, лог вопросов) не блокирует читателей (админку, поиск) —
+    # без него запись держит эксклюзивный лок на файл, и параллельные запросы ждут.
+    # journal_mode персистентен в самом файле БД, но выставляем на каждом коннекте —
+    # дёшево (no-op, если уже WAL) и не зависит от того, какой модуль подключился первым
+    # (db.py и settings_store.py открывают ОДИН файл каждый своим соединением).
+    con.execute("PRAGMA journal_mode=WAL")
+    con.execute("PRAGMA busy_timeout=30000")
     try:
         yield con
         con.commit()
@@ -102,6 +109,14 @@ def init_db() -> None:
         # по конкретным старым ответам).
         if "resolved" not in cols:
             con.execute("ALTER TABLE query_log ADD COLUMN resolved INTEGER NOT NULL DEFAULT 0")
+
+        # Без индексов эти колонки сканируются полностью на каждый запрос — аналитика,
+        # темы/пробелы, история конкретного треда/пользователя. С ростом лога (тысячи
+        # строк) это всё медленнее; индексы дешёвы на запись, но сильно ускоряют чтение.
+        con.execute("CREATE INDEX IF NOT EXISTS idx_query_log_thread_key ON query_log(thread_key)")
+        con.execute("CREATE INDEX IF NOT EXISTS idx_query_log_topic ON query_log(topic)")
+        con.execute("CREATE INDEX IF NOT EXISTS idx_query_log_created_at ON query_log(created_at)")
+        con.execute("CREATE INDEX IF NOT EXISTS idx_query_log_asker_user_id ON query_log(asker_user_id)")
 
         # Именные аккаунты админки (email + пароль) — в дополнение к общему паролю
         # (ADMIN_PASSWORD в .env), который продолжает работать как раньше.

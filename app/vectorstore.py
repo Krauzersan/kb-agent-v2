@@ -1,7 +1,10 @@
-"""Встроенный Qdrant (локальный, без отдельного сервиса): данные лежат файлами на диске.
+"""Клиент к Qdrant (настоящий сервер, свой процесс — не встроенное файловое хранилище).
 
-Один процесс приложения открывает локальное хранилище, поэтому все операции
-сериализуем через лок — так безопасно из фоновых задач.
+Сервер сам безопасно обрабатывает конкурентные запросы, поэтому лок нужен НЕ для
+защиты Qdrant, а для наших собственных многошаговых операций (check-then-create в
+ensure_collection, delete+recreate в wipe_all) — сериализуем их между собой, чтобы
+не словить состояние гонки в СВОЕЙ логике. Чтение (search, get_file_chunks) — один
+запрос без побочных эффектов, лока не требует и не держит.
 """
 from __future__ import annotations
 
@@ -50,7 +53,7 @@ def ensure_collection() -> None:
                 pass
 
 
-def _embedding_title(filename: str) -> str:
+def embedding_title(filename: str) -> str:
     """Последний сегмент «хлебных крошек» имени файла — заголовок статьи, без папок/
     канала. Расплывчатый вопрос про ТЕМУ файла («как настроить акцию») обычно не
     находит его куски: сам заголовок встречается один раз в начале файла, а не в
@@ -75,7 +78,7 @@ def add_chunks(file_id: int, filename: str, chunks: List[str], on_progress=None,
     prio = 1 if priority else 0
     c = client()
     added = 0
-    title = _embedding_title(filename)
+    title = embedding_title(filename)
     for i in range(0, len(chunks), batch):
         sub = chunks[i:i + batch]
         embed_input = [f"{title}\n\n{chunk}" if title else chunk for chunk in sub]
@@ -166,37 +169,35 @@ def get_file_chunks(file_id: int, limit: int = 1500) -> List[dict]:
         must=[qm.FieldCondition(key="file_id", match=qm.MatchValue(value=int(file_id)))]
     )
     next_off = None
-    with _lock:
-        c = client()
-        while len(out) < limit:
-            points, next_off = c.scroll(
-                collection_name=settings.QDRANT_COLLECTION,
-                scroll_filter=flt,
-                with_payload=True,
-                with_vectors=False,
-                limit=min(256, limit - len(out)),
-                offset=next_off,
-            )
-            for p in points:
-                out.append({
-                    "chunk_index": p.payload.get("chunk_index", 0),
-                    "text": p.payload.get("text", ""),
-                })
-            if not next_off or not points:
-                break
+    c = client()
+    while len(out) < limit:
+        points, next_off = c.scroll(
+            collection_name=settings.QDRANT_COLLECTION,
+            scroll_filter=flt,
+            with_payload=True,
+            with_vectors=False,
+            limit=min(256, limit - len(out)),
+            offset=next_off,
+        )
+        for p in points:
+            out.append({
+                "chunk_index": p.payload.get("chunk_index", 0),
+                "text": p.payload.get("text", ""),
+            })
+        if not next_off or not points:
+            break
     out.sort(key=lambda x: x["chunk_index"])
     return out
 
 
 def search(query: str, top_k: int) -> List[dict]:
     vec = embeddings.embed_query(query)
-    with _lock:
-        hits = client().search(
-            collection_name=settings.QDRANT_COLLECTION,
-            query_vector=vec,
-            limit=top_k,
-            with_payload=True,
-        )
+    hits = client().search(
+        collection_name=settings.QDRANT_COLLECTION,
+        query_vector=vec,
+        limit=top_k,
+        with_payload=True,
+    )
     return [
         {
             "score": h.score,
