@@ -266,6 +266,18 @@ def _normalize_history(history):
     return msgs
 
 
+# Минимальный max_tokens для effort-уровней с тяжёлым reasoning. Проверено эмпирически
+# на claude-sonnet-5: при effort=max модель тратит ВЕСЬ заданный max_tokens на
+# внутреннее рассуждение и не оставляет ни одного токена на видимый текст — в потоке
+# приходит stop_reason=max_tokens и ПУСТОЙ ответ пользователю. Панель настроек позволяет
+# выставить effort=max/xhigh независимо от claude_max_tokens, так что без этого пола
+# админ может незаметно включить комбинацию, которая всегда отвечает пустотой.
+_MIN_TOKENS_FOR_EFFORT = {
+    "xhigh": 4000,
+    "max": 6000,
+}
+
+
 def ask(question: str, hits: List[dict], history=None, channel: str = "internal",
         mode: str = "normal", max_tokens: int | None = None) -> str:
     client = _get_client()
@@ -276,6 +288,13 @@ def ask(question: str, hits: List[dict], history=None, channel: str = "internal"
     # на видимый текст (в потоке тогда придёт stop_reason=max_tokens и ПУСТОЙ ответ).
     max_tokens = max_tokens or int(settings_store.get("claude_max_tokens"))
     effort = (settings_store.get("claude_effort") or "high").strip()
+    floor = _MIN_TOKENS_FOR_EFFORT.get(effort)
+    if floor and max_tokens < floor:
+        log.warning(
+            "claude_max_tokens=%s слишком мал для effort=%s (риск пустого ответа) — "
+            "поднимаю до %s для этого запроса", max_tokens, effort, floor,
+        )
+        max_tokens = floor
     user_content = build_user_message(question, hits, channel=channel)
     messages = _normalize_history(history)
     if messages and messages[-1]["role"] == "user":
