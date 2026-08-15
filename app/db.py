@@ -67,9 +67,20 @@ def init_db() -> None:
         # иногда ранжирует ниже точное совпадение (код ошибки, версия, название кассы),
         # BM25 это компенсирует. Отдельная таблица, не привязана к Qdrant — если её нет
         # для файла (ещё не бэкфилнули), гибридный поиск просто откатывается на чистый вектор.
+        #
+        # "stemmed" — единственная ИНДЕКСИРУЕМАЯ колонка (см. _stem_text): unicode61 без
+        # стемминга не находил "списание" по запросу "списать" — разные словоформы для
+        # FTS были просто разными словами. "text" остаётся UNINDEXED и хранит ОРИГИНАЛЬНЫЙ
+        # текст — это то, что реально уходит в контекст модели (см. rag.py); стеммированную
+        # кашу туда отдавать нельзя, она только для матчинга.
+        cols = [r[1] for r in con.execute("PRAGMA table_info(chunks_fts)").fetchall()]
+        if cols and "stemmed" not in cols:
+            # Старая схема (до стемминга) — данные всё равно нужно переиндексировать
+            # (см. admin._backfill_fts), пересоздаём таблицу целиком.
+            con.execute("DROP TABLE chunks_fts")
         con.execute(
             "CREATE VIRTUAL TABLE IF NOT EXISTS chunks_fts USING fts5("
-            "file_id UNINDEXED, chunk_index UNINDEXED, text)"
+            "file_id UNINDEXED, chunk_index UNINDEXED, text UNINDEXED, stemmed)"
         )
 
         # Лог реальных вопросов агенту (Пачка/Omnidesk/тест из панели) — отладочная
@@ -303,6 +314,31 @@ def catalog_stats() -> dict:
 
 
 # ---------- лексический индекс кусков (BM25 для гибридного поиска) ----------
+#
+# unicode61 (дефолтный токенизатор FTS5) не знает морфологии — "списание" и "списать"
+# для него просто два разных слова, ноль общих токенов. Снимаем словоформы стеммером
+# (Snowball, русский) ДО того, как текст попадёт в индекс/запрос: "бонусы"/"бонус",
+# "кассы"/"касса" после стемминга совпадают и находятся друг через друга.
+#
+# Важная оговорка: это ЧИНИТ словоизменение (падеж, число, время), но НЕ словообразование
+# — "списать" (глагол) и "списание" (отглагольное существительное) для стеммера тоже
+# остаются разными основами ("списа" и "списан"), это не баг стеммера, а предел метода:
+# производные слова — это не словоформы одного слова. Проверено эмпирически на паре
+# snowball/pymorphy3 — ни один вариант эту конкретную пару не решает.
+import snowballstemmer as _snowballstemmer  # noqa: E402
+
+_FTS_TOKEN_RE = re.compile(r"\w+", re.UNICODE)
+_stemmer = _snowballstemmer.stemmer("russian")
+
+
+def _stem_text(text: str) -> str:
+    """Токенизирует и стеммирует текст — ТОЛЬКО для колонки "stemmed" (индекс/запрос),
+    никогда не для показа пользователю/модели (см. схему chunks_fts в init_db)."""
+    tokens = _FTS_TOKEN_RE.findall((text or "").lower())
+    if not tokens:
+        return ""
+    return " ".join(_stemmer.stemWords(tokens))
+
 
 def index_chunks_fts(file_id: int, chunks: list) -> None:
     """Перезаписывает лексический индекс кусков файла (вызывается вместе с индексацией
@@ -310,8 +346,8 @@ def index_chunks_fts(file_id: int, chunks: list) -> None:
     with _lock, _conn() as con:
         con.execute("DELETE FROM chunks_fts WHERE file_id = ?", (file_id,))
         con.executemany(
-            "INSERT INTO chunks_fts (file_id, chunk_index, text) VALUES (?, ?, ?)",
-            [(file_id, i, chunk) for i, chunk in enumerate(chunks)],
+            "INSERT INTO chunks_fts (file_id, chunk_index, text, stemmed) VALUES (?, ?, ?, ?)",
+            [(file_id, i, chunk, _stem_text(chunk)) for i, chunk in enumerate(chunks)],
         )
 
 
@@ -335,9 +371,6 @@ def fts_indexed_file_ids() -> set:
         return {int(r["file_id"]) for r in rows}
 
 
-_FTS_TOKEN_RE = re.compile(r"\w+", re.UNICODE)
-
-
 def search_fts(query: str, limit: int = 50) -> list:
     """Лексический (BM25) поиск по кускам. Возвращает [{file_id, chunk_index, text,
     filename, rank}] в порядке релевантности (лучшие первые) — rank это bm25() SQLite:
@@ -348,14 +381,18 @@ def search_fts(query: str, limit: int = 50) -> list:
     раньше BM25 использовался только чтобы дорасчитать скор уже найденным вектором
     кускам, теперь это самостоятельный источник кандидатов.
 
-    Токенизируем запрос вручную и склеиваем через OR — так избегаем проблем с
-    FTS5-синтаксисом в сыром пользовательском вопросе (кавычки, дефисы, звёздочки
-    трактуются MATCH как операторы, а нам нужен просто безопасный OR-поиск по словам).
+    Токенизируем запрос вручную, стеммируем (см. _stem_text) и склеиваем через OR —
+    так избегаем проблем с FTS5-синтаксисом в сыром пользовательском вопросе (кавычки,
+    дефисы, звёздочки трактуются MATCH как операторы, а нам нужен просто безопасный
+    OR-поиск по словам) и заодно ищем по той же стеммированной колонке, что и индекс.
     """
     tokens = _FTS_TOKEN_RE.findall((query or "").lower())[:20]
     if not tokens:
         return []
-    match_q = " OR ".join(f'"{t}"' for t in tokens)
+    stemmed = [t for t in _stemmer.stemWords(tokens) if t]
+    if not stemmed:
+        return []
+    match_q = " OR ".join(f'"{t}"' for t in stemmed)
     with _lock, _conn() as con:
         try:
             rows = con.execute(

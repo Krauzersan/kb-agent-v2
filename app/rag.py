@@ -6,6 +6,7 @@ import re
 
 import db
 import deep
+import embeddings
 import llm
 import mapreduce
 import reranker
@@ -157,6 +158,30 @@ def _rrf_fuse(vector_hits: list, bm25_hits: list) -> list:
     return cand
 
 
+# Не больше стольки кусков ОДНОГО файла в финальном top_k. Заголовок подмешивается в
+# каждый кусок файла перед FTS-индексацией (см. ingest.py/admin.py — embedding_title),
+# поэтому совпадение по заголовку задирает BM25-скор сразу всем кускам этого файла —
+# без ограничения один длинный файл может занять top_k целиком и вытеснить остальные
+# источники (проверено: 15 из 15 в выдаче — один файл). Может вернуть МЕНЬШЕ top_k,
+# если после ограничения разнообразия по-настоящему разных файлов не хватает — это
+# осознанный компромисс: лучше меньше кусков, чем выдача целиком из одного файла.
+_PER_FILE_CAP = 3
+
+
+def _cap_per_file(cand: list, top_k: int, cap: int = _PER_FILE_CAP) -> list:
+    counts: dict = {}
+    top = []
+    for h in cand:
+        fid = h.get("file_id")
+        if counts.get(fid, 0) >= cap:
+            continue
+        top.append(h)
+        counts[fid] = counts.get(fid, 0) + 1
+        if len(top) >= top_k:
+            break
+    return top
+
+
 def _search_with_priority(question: str, top_k: int) -> tuple[list, bool]:
     """Если есть приоритетные файлы — мягко поднимаем их выше в выдаче.
 
@@ -211,11 +236,33 @@ def _search_with_priority(question: str, top_k: int) -> tuple[list, bool]:
         h["priority"] = 1 if h.get("file_id") in prio_ids else 0
         h["rank"] = h["rerank"] + (boost if (h["priority"] and boost > 0) else 0)
     cand.sort(key=lambda h: h["rank"], reverse=True)
-    top = cand[:top_k]
+    top = _cap_per_file(cand, top_k)
     if prio_ids and boost > 0:
         log.info("Поиск: приоритетных файлов=%s, буст=%s, приоритетных в выдаче=%s из %s",
                  len(prio_ids), boost, sum(1 for h in top if h["priority"]), len(top))
     return top, reranked
+
+
+def _backfill_cosine(hits: list, question: str) -> None:
+    """min_relevance по косинусу раньше пропускал мимо порога кандидатов, найденных
+    ТОЛЬКО через BM25 (у них не было "score" — вектор их не отбирал), потому что
+    "score_key is None" читалось как "неизвестно, пропустить", а не "низкая
+    релевантность, отфильтровать" — порог фактически ничего не гейтил для лексических
+    находок. Досчитываем косинус и для них: один forward пары эмбеддинга дешевле
+    прохода реранкера (не пара текстов, не кросс-энкодер), поэтому это не тот же
+    trade-off, что решили не делать по умолчанию для реранкера — можно всегда."""
+    missing = [h for h in hits if h.get("score") is None]
+    if not missing:
+        return
+    try:
+        qvec = embeddings.embed_query(question)
+        vecs = embeddings.embed_passages([h.get("text") or "" for h in missing])
+        for h, v in zip(missing, vecs):
+            h["score"] = sum(a * b for a, b in zip(qvec, v))
+    except Exception:
+        log.exception("Не удалось досчитать косинус для BM25-only кандидатов — режем по порогу")
+        for h in missing:
+            h["score"] = 0.0
 
 
 def answer_question(question: str, history=None, channel: str = "internal",
@@ -318,15 +365,11 @@ def _answer_question(question: str, history=None, channel: str = "internal") -> 
     except (TypeError, ValueError):
         min_rel = 0.0
     if min_rel > 0:
-        # Кусок без score_key — это НЕ «низкая релевантность», а кандидат, для
-        # которого эта шкала в принципе не считалась (типичный случай: находка
-        # ТОЛЬКО через BM25 в hybrid-пуле, когда reranker не отработал — у неё
-        # нет cosine score, потому что вектор её не отбирал вообще). Раньше
-        # такого кандидата просто не существовало (top-k был только вектор),
-        # поэтому фильтровать его по отсутствующей шкале — не «оставить как
-        # было», а тихо выбрасывать именно то, ради чего сделан RRF. Гейтим
-        # только тех, у кого эта шкала реально посчитана.
-        relevant = [h for h in hits if h.get(score_key) is None or h[score_key] >= min_rel]
+        if score_key == "score":
+            # Кандидаты, найденные ТОЛЬКО через BM25 (нет cosine — вектор их не
+            # отбирал), иначе прошли бы порог без проверки (см. _backfill_cosine).
+            _backfill_cosine(hits, question)
+        relevant = [h for h in hits if (h.get(score_key) or 0) >= min_rel]
         if not relevant:
             best = max((h.get(score_key) or 0) for h in hits) if hits else 0
             return {

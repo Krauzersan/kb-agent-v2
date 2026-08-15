@@ -66,15 +66,46 @@ _SECTION_MAX_TOKENS = 3000
 _ASSEMBLE_MAX_TOKENS = 4000
 
 
+def _extract_json_array(text: str) -> str:
+    """Находит ПАРНУЮ закрывающую скобку для первой "[" (считая вложенность и пропуская
+    скобки внутри строковых литералов) — а не rfind("]"), который хватает ПОСЛЕДНЮЮ "]"
+    во всём тексте. Если модель дописывает пояснение после массива (несмотря на
+    инструкцию отвечать строго JSON) и это пояснение само содержит "]" — rfind включает
+    в срез весь мусор между настоящим концом массива и этой ложной скобкой, и json.loads
+    падает с "Extra data" на валидном по сути массиве."""
+    start = text.find("[")
+    if start == -1:
+        return text
+    depth = 0
+    in_string = False
+    escape = False
+    for i in range(start, len(text)):
+        ch = text[i]
+        if in_string:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch == "[":
+            depth += 1
+        elif ch == "]":
+            depth -= 1
+            if depth == 0:
+                return text[start:i + 1]
+    return text[start:]  # не сбалансировано — пусть json.loads сам поднимет ошибку
+
+
 def _parse_json(raw: str):
     """Модели иногда оборачивают JSON в ```json ... ``` или дописывают пояснение до/после
     массива, несмотря на инструкцию отвечать строго JSON — вырезаем сам массив."""
     raw = (raw or "").strip()
     raw = re.sub(r"^```(?:json)?\s*|\s*```\s*$", "", raw, flags=re.IGNORECASE)
-    start, end = raw.find("["), raw.rfind("]")
-    if start != -1 and end != -1 and end > start:
-        raw = raw[start:end + 1]
-    return json.loads(raw)
+    return json.loads(_extract_json_array(raw))
 
 
 def _decompose(question: str) -> list[str]:

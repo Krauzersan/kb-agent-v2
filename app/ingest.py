@@ -263,6 +263,25 @@ def _pack_lines(section: str, size: int, overlap: int, chunks: List[str], buf: s
     return buf
 
 
+def _with_overlap(chunks: List[str], overlap: int) -> List[str]:
+    """Добавляет каждому куску (кроме первого) хвост предыдущего — иначе куски режутся
+    встык и модель на границе теряет контекст (конец мысли в одном куске, начало
+    ответа на неё — в следующем, ни один поиск не находит оба разом). Предпочитаем
+    целый последний абзац предыдущего куска (не рвём мысль ещё раз); если абзацев нет
+    или последний длиннее 2×overlap — берём последние overlap символов как раньше
+    делала только ветка "длинный абзац" в _pack_lines."""
+    if overlap <= 0 or len(chunks) < 2:
+        return chunks
+    out = [chunks[0]]
+    for i in range(1, len(chunks)):
+        prev = chunks[i - 1]
+        paras = [p for p in prev.split("\n") if p.strip()]
+        tail = paras[-1] if paras and len(paras[-1]) <= overlap * 2 else prev[-overlap:]
+        tail = tail.strip()
+        out.append(f"{tail}\n\n{chunks[i]}" if tail else chunks[i])
+    return out
+
+
 def chunk_text(text: str) -> List[str]:
     text = (text or "").strip()
     if not text:
@@ -292,7 +311,7 @@ def chunk_text(text: str) -> List[str]:
             buf = _pack_lines(section, size, overlap, chunks, buf)
     if buf:
         chunks.append(buf)
-    return chunks
+    return _with_overlap(chunks, overlap)
 
 
 # ---------- парсинг веб-страниц (по ссылке) ----------
