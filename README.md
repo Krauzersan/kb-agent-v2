@@ -92,7 +92,14 @@ Telegram and WhatsApp are newer here, so they're still a bit more basic: plain t
 <a id="under-the-hood"></a>
 ### 🔎 Under the hood
 
-**Retrieval** — how a question finds the right chunk:
+**Router** — every question is classified before it's answered, into one of three pipelines:
+- **FAST** — a normal, self-contained question. Runs the hybrid search + reranker pipeline described below. The overwhelming majority of questions land here.
+- **AGGREGATION** — the answer is a full list scattered across many files ("what payment methods are there", "list all integrations") — routes to the catalog/full-scan retrieval described in the Retrieval section below.
+- **DEEP** — a complex multi-part question or an explicit request for a spec/plan ("write a spec for integrating with X", "compare Y and Z and propose an architecture"). Runs its own pipeline: decompose the question into sub-questions → search the knowledge base for each one independently → draft a plan (section outline) from what was found → generate each section as its own model call, grounded in the gathered facts → merge the section drafts into one coherent final answer. An order of magnitude more model calls than FAST (closer to a dozen than one), so it's reserved for questions that actually need that depth — not triggered by a normal question.
+
+Classification is a short model call reading the question's actual meaning, not a keyword match — a regex pre-filter still catches the obvious AGGREGATION phrasings to skip that extra round-trip, but FAST vs. DEEP has no keyword shortcut; telling "explain how X works" from "write a full spec covering X, Y and Z with all the edge cases" genuinely needs the model to read the question. Override it in Settings → Search (**Auto** / **Fast** / **Deep**) — Fast and Deep force that pipeline for *every* question, bypassing the classifier (and its extra model call) entirely.
+
+**Retrieval** — how a FAST question finds the right chunk:
 - **Hybrid search** — a vector search (semantic similarity) and a BM25 lexical search (SQLite FTS5) run independently, then get combined with **Reciprocal Rank Fusion**. This matters more than it sounds: a chunk with an exact match — an error code, a version number, a product name — can rank low semantically and never make it into a pure vector top-N. Fusing two independent result lists means a strong lexical hit surfaces even when the embedding never would have found it on its own.
 - **Cross-encoder reranker** (optional, off by default) — vector and BM25 each score a chunk against the question in isolation; a reranker reads the question *and* the chunk together in one pass, which ranks more accurately at the cost of a CPU pass per candidate. Runs only over the narrow pool hybrid search already picked, not the whole base. Toggle it in Settings → Search.
 - Priority boost for files marked ★, and a same-topic filter so, say, a question about one POS system's refund flow doesn't get an answer built from a different POS system's docs.
@@ -246,6 +253,8 @@ rag-agent/
     ├── export.py            # Excel report (admin: /admin/export.xlsx)
     ├── charts.py            # inline SVG chart geometry for the Analytics dashboard
     ├── rag.py                # search -> hybrid RRF fusion -> optional reranker -> LLM
+    ├── router.py             # classifies each question into FAST / AGGREGATION / DEEP
+    ├── deep.py               # DEEP pipeline: decompose -> search -> plan -> per-section -> merge
     ├── reranker.py           # cross-encoder reranking (optional, see Settings → Search)
     ├── ingest.py / embeddings.py / vectorstore.py / db.py
     └── templates/           # admin UI pages
@@ -333,7 +342,14 @@ Telegram и WhatsApp тут новенькие, поэтому пока попр
 <a id="tehnicheski"></a>
 ### 🔎 Технически
 
-**Поиск** — как вопрос находит нужный кусок текста:
+**Роутер** — каждый вопрос сначала классифицируется, и уже потом уходит в один из трёх конвейеров:
+- **FAST** — обычный самодостаточный вопрос. Идёт в гибридный поиск + реранкер, описанные ниже. Подавляющее большинство вопросов — сюда.
+- **AGGREGATION** — ответ размазан по многим файлам («какие есть способы оплаты», «перечисли все интеграции») — уходит в каталог/полный обход, см. раздел «Поиск» ниже.
+- **DEEP** — сложный многосоставной вопрос или явный запрос на ТЗ/план («составь ТЗ на интеграцию с X», «сравни варианты Y и Z и предложи архитектуру»). Работает по своему конвейеру: разбить вопрос на подвопросы → найти факты по каждому независимо → собрать план (структуру разделов) из найденного → сгенерировать каждый раздел отдельным вызовом модели, опираясь на собранные факты → свести черновики разделов в один связный ответ. На порядок больше вызовов модели, чем FAST (ближе к десятку, чем к одному), поэтому включается только там, где реально нужна такая глубина — обычный вопрос сюда не попадёт.
+
+Классификация — короткий вызов модели, который читает СМЫСЛ вопроса, а не сверяет его с ключевыми словами: регекс-предфильтр всё ещё ловит очевидные агрегационные формулировки (экономит лишний вызов), но различить FAST и DEEP по ключевым словам в принципе нельзя — «объясни, как работает X» и «распиши подробное ТЗ по X, Y и Z со всеми нюансами» отличаются только смыслом. Переопределяется вручную в Настройки → Поиск (**Авто** / **Быстрый** / **Глубокий анализ**) — «Быстрый» и «Глубокий анализ» форсируют соответствующий конвейер для ЛЮБОГО вопроса, минуя классификатор (и его лишний вызов модели) полностью.
+
+**Поиск** — как FAST-вопрос находит нужный кусок текста:
 - **Гибридный поиск** — векторный поиск (смысловая близость) и лексический BM25-поиск (SQLite FTS5) работают независимо друг от друга, а потом объединяются через **Reciprocal Rank Fusion**. Это не мелочь: кусок с точным совпадением — код ошибки, номер версии, название модели — может ранжироваться низко по смыслу и вообще не попасть в топ вектора. Объединение двух независимых списков результатов означает, что сильное лексическое совпадение всплывёт, даже если эмбеддинг сам по себе его бы никогда не нашёл.
 - **Кросс-энкодер реранкер** (опционально, по умолчанию выключен) — вектор и BM25 оценивают кусок относительно вопроса каждый по отдельности; реранкер читает вопрос и кусок ВМЕСТЕ, за один проход — ранжирует точнее, но ценой прохода модели на процессоре на каждого кандидата. Работает только над узким пулом, который уже отобрал гибридный поиск, не над всей базой. Включается во вкладке Настройки → Поиск.
 - Буст приоритетных файлов (★) и фильтр «не путать похожие темы» — например, чтобы вопрос про возврат в одной кассовой системе не собрал ответ из документации другой кассы.
@@ -487,6 +503,8 @@ rag-agent/
     ├── export.py            # Excel-отчёт (админка: /admin/export.xlsx)
     ├── charts.py            # геометрия inline SVG-графиков для дашборда «Аналитика»
     ├── rag.py                # поиск -> гибридный RRF-фьюжн -> опц. реранкер -> LLM
+    ├── router.py             # классифицирует вопрос: FAST / AGGREGATION / DEEP
+    ├── deep.py               # DEEP-конвейер: декомпозиция -> поиск -> план -> разделы -> сборка
     ├── reranker.py           # кросс-энкодер реранкинг (опционально, см. Настройки → Поиск)
     ├── ingest.py / embeddings.py / vectorstore.py / db.py
     └── templates/           # страницы админки

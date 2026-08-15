@@ -1177,7 +1177,7 @@ async def settings_save(request: Request):
                 "claude_max_tokens", "claude_effort", "openai_effort", "deepseek_effort",
                 "gigachat_model", "gigachat_scope",
                 "claude_proxy", "top_k", "priority_boost", "min_relevance", "min_relevance_rerank",
-                "reranker_enabled",
+                "reranker_enabled", "router_mode",
                 "search_mode", "public_base_url",
                 "pachca_api_url", "pachca_allowed_ip", "reaction_indicator",
                 "omnidesk_domain", "omnidesk_staff_email", "omnidesk_staff_id",

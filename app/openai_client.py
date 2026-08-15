@@ -53,7 +53,7 @@ def _get_client(api_key: str, base_url: str | None):
 
 
 def ask(question: str, hits: List[dict], provider: str = "openai", history=None,
-        channel: str = "internal", mode: str = "normal") -> str:
+        channel: str = "internal", mode: str = "normal", max_tokens: int | None = None) -> str:
     if provider == "deepseek":
         api_key = (settings_store.get("deepseek_api_key") or "").strip()
         base_url = "https://api.deepseek.com"
@@ -71,7 +71,7 @@ def ask(question: str, hits: List[dict], provider: str = "openai", history=None,
         )
 
     client = _get_client(api_key, base_url)
-    max_tokens = int(settings_store.get("claude_max_tokens"))
+    max_tokens = max_tokens or int(settings_store.get("claude_max_tokens"))
     user_content = build_user_message(question, hits, channel=channel)
     messages = [{"role": "system", "content": _system_prompt(channel, mode)}]
     for h in (history or []):

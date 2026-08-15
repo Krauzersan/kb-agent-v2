@@ -130,8 +130,8 @@ def _chat(messages: list, max_tokens: int) -> str:
 
 
 def ask(question: str, hits: List[dict], history=None, channel: str = "internal",
-        mode: str = "normal") -> str:
-    max_tokens = int(settings_store.get("claude_max_tokens"))
+        mode: str = "normal", max_tokens: int | None = None) -> str:
+    max_tokens = max_tokens or int(settings_store.get("claude_max_tokens"))
     user_content = build_user_message(question, hits, channel=channel)
     messages = [{"role": "system", "content": _system_prompt(channel, mode)}]
     for h in (history or []):

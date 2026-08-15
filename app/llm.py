@@ -60,16 +60,18 @@ def _fallback_order() -> list[str]:
 
 
 def _dispatch_ask(provider: str, question: str, hits: List[dict], history, channel: str,
-                  mode: str) -> str:
+                  mode: str, max_tokens: int | None = None) -> str:
     if provider == "openai":
         return openai_client.ask(question, hits, provider="openai", history=history,
-                                  channel=channel, mode=mode)
+                                  channel=channel, mode=mode, max_tokens=max_tokens)
     if provider == "deepseek":
         return openai_client.ask(question, hits, provider="deepseek", history=history,
-                                  channel=channel, mode=mode)
+                                  channel=channel, mode=mode, max_tokens=max_tokens)
     if provider == "gigachat":
-        return gigachat_client.ask(question, hits, history=history, channel=channel, mode=mode)
-    return claude_client.ask(question, hits, history=history, channel=channel, mode=mode)
+        return gigachat_client.ask(question, hits, history=history, channel=channel, mode=mode,
+                                    max_tokens=max_tokens)
+    return claude_client.ask(question, hits, history=history, channel=channel, mode=mode,
+                              max_tokens=max_tokens)
 
 
 def _dispatch_complete(provider: str, system: str, user: str, max_tokens: int) -> str:
@@ -104,10 +106,10 @@ def _with_fallback(dispatch, label: str = ""):
 
 
 def ask(question: str, hits: List[dict], history=None, channel: str = "internal",
-        mode: str = "normal") -> str:
+        mode: str = "normal", max_tokens: int | None = None) -> str:
     return _with_fallback(
         lambda provider: _dispatch_ask(provider, question, hits, history=history,
-                                       channel=channel, mode=mode)
+                                       channel=channel, mode=mode, max_tokens=max_tokens)
     )
 
 

@@ -5,43 +5,15 @@ import logging
 import re
 
 import db
+import deep
 import llm
 import mapreduce
 import reranker
+import router
 import settings_store
 import vectorstore
 
 log = logging.getLogger("rag")
-
-# ---------- роутер: агрегационные вопросы («перечисли все X», «список всех Y») ----------
-#
-# Обычный top-k векторный поиск отдаёт несколько ближайших по смыслу кусков — этого
-# достаточно для точечного вопроса, но НЕ для вопроса, ответ на который размазан по
-# многим разным файлам («какие есть кассовые ПО» — у каждой кассы свой файл).
-# Для таких вопросов top-k почти всегда возвращает куски из 1-2 файлов и обрезает
-# остальное. Ниже — детектор такого вопроса и два альтернативных пути ответа.
-_AGG_RE = re.compile(
-    # Голые \bвсе\b|\bвсех\b|\bвсём\b|\bвсей\b сюда специально не включаем — самые
-    # частые слова в русском («спасибо всем», «у всех клиентов», «расскажи обо
-    # всём»), они ложно уводили обычные вопросы в агрегационный режим. Но простой
-    # переход на фразы вида «список всех» ловил только неестественный порядок слов
-    # («какие есть X») — обычный русский порядок («какие X есть/бывают») и частые
-    # «все способы/варианты/условия X» вообще не матчились и явно теряли полноту
-    # ответа. Поэтому: «какие ... есть/бывают/существуют/поддерживаются» — с любым
-    # текстом между словами (до 40 симв., без ?), плюс «все + существительное»
-    # ограничено конкретным списком слов-маркеров перечисления (а не голым «все»).
-    r"перечисли|перечислите|весь список|полный список|список всех|список всей|"
-    r"какие\b(?:(?!\?).){0,40}\b(есть|бывают|существуют|поддерживаются)\b|"
-    r"\bвсе\s+(способ\w*|вариант\w*|возможност\w*|метод\w*|вид\w*|тип\w*|функци\w*|"
-    r"настройк\w*|интеграци\w*|канал\w*|статус\w*|услови\w*|правил\w*|шаг\w*|"
-    r"пункт\w*|раздел\w*|инструмент\w*|отчет\w*|отчёт\w*|показател\w*)|"
-    r"со всеми|полностью список",
-    re.IGNORECASE,
-)
-
-
-def is_aggregation_question(question: str) -> bool:
-    return bool(_AGG_RE.search(question or ""))
 
 
 # ---------- фильтр «не путать кассовые системы» ----------
@@ -294,9 +266,16 @@ def _answer_question(question: str, history=None, channel: str = "internal") -> 
     if not question:
         return {"answer": "Пустой вопрос.", "sources": []}
 
-    # Агрегационный вопрос («перечисли все X») — обычный top-k поиск для него не годится,
-    # т.к. ответ обычно размазан по многим файлам. Уходим в один из двух режимов каталога.
-    if is_aggregation_question(question):
+    # Роутер решает, каким из трёх конвейеров обрабатывать вопрос (см. router.py):
+    # FAST — обычный top-k ниже; AGGREGATION — вопрос размазан по многим файлам (перечисли
+    # все X); DEEP — сложный многосоставной вопрос/ТЗ, нужна декомпозиция (см. deep.py).
+    # Оба альтернативных пути при сбое (или если сами решат, что не годятся для этого
+    # вопроса) падают обратно сюда же, на обычный top-k — ни один режим не может привести
+    # к отказу там, где раньше был нормальный ответ.
+    route = router.classify(question)
+    log.info("Роутер: %r -> %s", question[:80], route)
+
+    if route == "aggregation":
         mode = (settings_store.get("search_mode") or "auto").strip().lower()
         try:
             if mode == "full_scan":
@@ -311,6 +290,17 @@ def _answer_question(question: str, history=None, channel: str = "internal") -> 
             return {"answer": str(e), "sources": [], "hits": []}
         except Exception:
             log.exception("Агрегационный роутер упал — падаю обратно на обычный top-k поиск")
+
+    elif route == "deep":
+        try:
+            result = deep.answer(question, history=history, channel=channel)
+            if result is not None:
+                return result
+            log.info("DEEP: вопрос не разложился на подвопросы — падаю обратно на top-k поиск")
+        except llm.LLMNotConfigured as e:
+            return {"answer": str(e), "sources": [], "hits": []}
+        except Exception:
+            log.exception("DEEP-режим упал — падаю обратно на обычный top-k поиск")
 
     vectorstore.ensure_collection()
     top_k = int(settings_store.get("top_k"))
@@ -367,4 +357,4 @@ def _answer_question(question: str, history=None, channel: str = "internal") -> 
             seen.add(name)
             sources.append(name)
 
-    return {"answer": answer, "sources": sources, "hits": hits}
+    return {"answer": answer, "sources": sources, "hits": hits, "mode": "fast"}

@@ -263,6 +263,16 @@
     <div class="card">
       <h2>Поиск по базе знаний</h2>
       <div class="field">
+        <label>Режим обработки вопроса<span class="help">?<span class="tip">«Авто» — агент сам определяет по смыслу вопроса, что перед ним: обычный точечный вопрос (быстрый гибридный поиск), вопрос-перечисление (обход всей базы) или сложный многосоставной вопрос/ТЗ (разбивка на подвопросы, план, сборка по разделам). «Быстрый» и «Глубокий анализ» форсируют соответствующий режим для ЛЮБОГО вопроса, минуя классификатор.</span></span></label>
+        <input type="hidden" name="router_mode" id="routerModeVal" value="{{ s.router_mode }}">
+        <div class="seg" id="routerModeSeg">
+          <button type="button" data-v="auto">Авто</button>
+          <button type="button" data-v="fast">Быстрый</button>
+          <button type="button" data-v="deep">Глубокий анализ</button>
+        </div>
+        <span class="hint">«Глубокий анализ» ощутимо медленнее и дороже (десяток+ вызовов модели вместо одного) — подходит для сложных технических вопросов и ТЗ, не для обычных вопросов.</span>
+      </div>
+      <div class="field">
         <label>Сколько выдержек брать из базы (top-k)<span class="help">?<span class="tip">Сколько похожих фрагментов передавать модели как контекст. Больше — шире охват, но больше «шума» и дороже. Обычно оптимально 3–8.</span></span></label>
         <div class="slider-row">
           <input type="range" name="top_k" min="1" max="15" step="1" value="{{ s.top_k }}"
@@ -594,6 +604,22 @@
   // Режим ответа на агрегационные вопросы
   (function(){
     var seg = document.getElementById('searchModeSeg'), val = document.getElementById('searchModeVal');
+    if(!seg || !val) return;
+    var btns = [].slice.call(seg.querySelectorAll('button'));
+    btns.forEach(function(b){
+      b.addEventListener('click', function(){
+        val.value = b.dataset.v;
+        btns.forEach(function(x){ x.classList.toggle('active', x === b); });
+      });
+    });
+    var cur = val.value || 'auto';
+    var active = btns.filter(function(b){ return b.dataset.v === cur; })[0] || btns[0];
+    active.classList.add('active');
+  })();
+
+  // Режим обработки вопроса (роутер)
+  (function(){
+    var seg = document.getElementById('routerModeSeg'), val = document.getElementById('routerModeVal');
     if(!seg || !val) return;
     var btns = [].slice.call(seg.querySelectorAll('button'));
     btns.forEach(function(b){

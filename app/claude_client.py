@@ -154,13 +154,38 @@ _CATALOG_MODE_HINT = (
 )
 
 
+# Режимы DEEP (см. deep.py) — сложный вопрос разбирается на подвопросы, по каждому разделу
+# плана модель пишет ЧАСТЬ ответа отдельным вызовом, потом все части сводятся в один. Без
+# этих хинтов каждый раздел получался бы отдельным мини-ответом со своим приветствием и
+# заключением — начало и конец в чистовике эта же модель (deep_assemble) не убирает
+# автоматически, надо явно попросить не добавлять их на шаге генерации раздела.
+_DEEP_SECTION_HINT = (
+    "\n\nВАЖНО про формат сейчас: это ОДИН раздел развёрнутого многосоставного ответа на "
+    "сложный вопрос, не ответ целиком — остальные разделы генерируются отдельными вызовами "
+    "и потом собираются вместе. Не здоровайся, не пиши общее вступление вроде «отвечаю на "
+    "ваш вопрос» и не добавляй общее заключение/резюме — сразу раскрывай заданную тему "
+    "раздела по существу."
+)
+
+_DEEP_ASSEMBLE_HINT = (
+    "\n\nВАЖНО: тебе даны готовые черновики разделов (в качестве «выдержек») — собери их в "
+    "ОДИН связный ответ. Убери повторы между разделами, сгладь переходы, оставь заголовки "
+    "разделов жирным текстом. Это редактура черновиков, а не досочинение — не добавляй "
+    "фактов, которых в них нет."
+)
+
+
 def _system_prompt(channel: str = "internal", mode: str = "normal") -> str:
     # Роль и правила задаются в панели; правила качества, картинки, бренд, приоритет,
     # форматирование, канал и режим источников — фиксированные.
     role = (settings_store.get("agent_role") or "").strip()
     rules = (settings_store.get("rag_rules") or "").strip()
     channel_hint = _CHANNEL_HINTS.get(channel, _CHANNEL_HINTS["internal"])
-    mode_hint = _CATALOG_MODE_HINT if mode == "catalog" else ""
+    mode_hint = {
+        "catalog": _CATALOG_MODE_HINT,
+        "deep_section": _DEEP_SECTION_HINT,
+        "deep_assemble": _DEEP_ASSEMBLE_HINT,
+    }.get(mode, "")
     return (role + ("\n\n" + rules if rules else "")
             + _GUIDELINES + _IMG_HINT + _BRAND_HINT + _PRIORITY_HINT + _FORMAT_HINT
             + channel_hint + mode_hint).strip()
@@ -242,10 +267,14 @@ def _normalize_history(history):
 
 
 def ask(question: str, hits: List[dict], history=None, channel: str = "internal",
-        mode: str = "normal") -> str:
+        mode: str = "normal", max_tokens: int | None = None) -> str:
     client = _get_client()
     model = settings_store.get("claude_model")
-    max_tokens = int(settings_store.get("claude_max_tokens"))
+    # Явный max_tokens (см. deep.py) переопределяет настройку панели — та рассчитана на
+    # обычный короткий ответ, а не на генерацию раздела ТЗ или сборку черновиков, где при
+    # высоком effort весь бюджет токенов может уйти в reasoning модели, не оставив места
+    # на видимый текст (в потоке тогда придёт stop_reason=max_tokens и ПУСТОЙ ответ).
+    max_tokens = max_tokens or int(settings_store.get("claude_max_tokens"))
     effort = (settings_store.get("claude_effort") or "high").strip()
     user_content = build_user_message(question, hits, channel=channel)
     messages = _normalize_history(history)
