@@ -312,6 +312,44 @@ def _resolve_period(period: str, date_from: str, date_to: str) -> tuple:
     return (None, None)
 
 
+def _previous_period(d_from: str, d_to: str) -> tuple:
+    """Предыдущий период той же длины, вплотную примыкающий к текущему — чтобы отчёт
+    показывал ДЕЛЬТУ (стоимость/оценка/новые пробелы по сравнению с прошлым разом),
+    а не просто повторял снимок, который и так виден на странице «Аналитика». Для
+    периода «весь период» (d_from/d_to оба пустые) сравнивать не с чем."""
+    if not d_from or not d_to:
+        return (None, None)
+    start = datetime.strptime(d_from, "%Y-%m-%d").date()
+    end = datetime.strptime(d_to, "%Y-%m-%d").date()
+    span = (end - start).days + 1
+    prev_end = start - timedelta(days=1)
+    prev_start = prev_end - timedelta(days=span - 1)
+    return (prev_start.isoformat(), prev_end.isoformat())
+
+
+def _delta(current, previous, higher_is_better=None) -> dict:
+    """Сравнение текущего значения с предыдущим периодом для отчёта. current/previous
+    — числа или None (None у любого из двух значит «сравнивать не с чем», например
+    провайдер без цены в usage_tracker — тогда возвращаем None, а не подставляем 0).
+    higher_is_better: True — рост это хорошо (оценка), False — рост это плохо
+    (стоимость), None — рост нейтрален (просто объём вопросов)."""
+    if current is None or previous is None:
+        return None
+    value = current - previous
+    pct = (value / previous * 100) if previous else None
+    arrow = "▲" if value > 0 else "▼" if value < 0 else "="
+    if higher_is_better is None or value == 0:
+        tone = "neutral"
+    elif (value > 0) == higher_is_better:
+        tone = "good"
+    else:
+        tone = "bad"
+    return {
+        "value": value, "pct": pct, "arrow": arrow, "tone": tone,
+        "abs_value": abs(value), "abs_pct": abs(pct) if pct is not None else None,
+    }
+
+
 def _period_label(period: str, d_from: str, d_to: str) -> str:
     """Человекочитаемая подпись выбранного периода — для подписей под графиками
     («Вопросы по дням», «Вопросов в тредах»), чтобы не молчать о том, какие данные
@@ -364,10 +402,12 @@ def analytics_page(request: Request, resolved: int = 0, topic: str = "",
 @router.get("/admin/report", response_class=HTMLResponse)
 def report_page(request: Request, period: str = "30", date_from: str = "", date_to: str = ""):
     """Отчёт на экране: сводка по стоимости, оценкам и пробелам в базе за выбранный
-    период — на экран, а не на почту/в Пачку и не файлом (тот же дайджест, что и
-    Excel-выгрузка/аналитика, но без скачивания, для быстрого просмотра прямо в
-    панели). По умолчанию — последние 30 дней, а не «весь период», как в аналитике:
-    отчёт по смыслу — снимок за недавнее время, а не архив за всю историю."""
+    период — на экран, а не на почту/в Пачку и не файлом. В отличие от страницы
+    «Аналитика» (снимок текущего состояния) отчёт сравнивает период с предыдущим
+    такой же длины — дельта по стоимости/оценке и НОВЫЕ пробелы (темы, которых не
+    было в пробелах прошлый раз) — это то, что стоит проверять при каждом заходе,
+    а не просто повторение дашборда. По умолчанию — последние 30 дней, а не «весь
+    период», как в аналитике: отчёт по смыслу — снимок за недавнее время."""
     auth.require_login(request)
     ctx = _base_ctx(request)
     d_from, d_to = _resolve_period(period, date_from, date_to)
@@ -376,14 +416,36 @@ def report_page(request: Request, period: str = "30", date_from: str = "", date_
         [t for t in stats if t["no_sources"] > 0],
         key=lambda t: t["no_sources"], reverse=True,
     )
+    usage = db.usage_totals(d_from, d_to, is_test=False)
+    overview = db.rating_overview(d_from, d_to)
+
+    prev_from, prev_to = _previous_period(d_from or "", d_to or "")
+    if prev_from and prev_to:
+        usage_prev = db.usage_totals(prev_from, prev_to, is_test=False)
+        overview_prev = db.rating_overview(prev_from, prev_to)
+        prev_gap_topics = {t["topic"] for t in db.topic_stats(prev_from, prev_to) if t["no_sources"] > 0}
+    else:
+        usage_prev = overview_prev = None
+        prev_gap_topics = set()
+    for g in gaps:
+        g["is_new"] = g["topic"] not in prev_gap_topics
+    new_gaps_count = sum(1 for g in gaps if g["is_new"])
+    # Новые пробелы — то, что стоит проверить в первую очередь — наверх списка.
+    gaps.sort(key=lambda g: (not g["is_new"], -g["no_sources"]))
+
     ctx.update({
         "period": period, "date_from": date_from, "date_to": date_to,
         "period_label": _period_label(period, d_from or "", d_to or ""),
-        "overview": db.rating_overview(d_from, d_to),
+        "has_comparison": bool(prev_from),
+        "prev_period_label": _period_label("custom", prev_from or "", prev_to or "") if prev_from else "",
+        "overview": overview, "overview_prev": overview_prev,
         "users": db.rating_stats_by_user(d_from, d_to),
-        "usage": db.usage_totals(d_from, d_to, is_test=False),
+        "usage": usage, "usage_prev": usage_prev,
         "usage_test": db.usage_totals(d_from, d_to, is_test=True),
-        "topics": stats, "gaps": gaps,
+        "cost_delta": _delta(usage.get("cost_usd"), usage_prev.get("cost_usd") if usage_prev else None, higher_is_better=False),
+        "rating_delta": _delta(overview.get("avg_rating"), overview_prev.get("avg_rating") if overview_prev else None, higher_is_better=True),
+        "questions_delta": _delta(usage.get("questions"), usage_prev.get("questions") if usage_prev else None),
+        "topics": stats, "gaps": gaps, "new_gaps_count": new_gaps_count,
         "untagged": db.count_untagged(),
     })
     return templates.TemplateResponse("report.html", ctx)

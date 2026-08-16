@@ -6,10 +6,6 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg>
     К аналитике
   </a>
-  <button class="ghost sm" type="button" onclick="window.print()">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
-    Печать / PDF
-  </button>
 {% endblock %}
 
 {% block head_extra %}
@@ -22,19 +18,22 @@
   .gap-row:last-child{border-bottom:none}
   .gap-row .topic{font-weight:560}
   .gap-row .meta{color:var(--muted); font-size:12.5px; margin-top:2px}
-  @media print{
-    .sidebar, .topbar, .period-bar{display:none !important}
-    .content{margin:0; padding:0}
-    .card{break-inside:avoid; border-color:#ccc !important}
-  }
+  .delta{font-size:12.5px; font-weight:600; margin-left:6px; white-space:nowrap}
+  .delta.good{color:var(--ok)}
+  .delta.bad{color:var(--err)}
+  .delta.neutral{color:var(--muted)}
+  .badge.new{background:var(--accent-weak); color:var(--accent-text)}
+  .highlights{display:flex; flex-wrap:wrap; gap:10px 28px; margin-bottom:20px}
+  .highlights .item{font-size:13.5px}
+  .highlights .item b{font-weight:650}
 </style>
 {% endblock %}
 
 {% block content %}
 
-<p class="desc" style="margin:-6px 0 16px">Сводка на экран: стоимость, оценки и пробелы в базе знаний за период —
-  без скачивания файла. Полная выгрузка со всеми вопросами — <a href="/admin/export.xlsx">Excel-отчёт</a>,
-  разбивка по вкладкам — <a href="/admin/analytics">страница «Аналитика»</a>.</p>
+<p class="desc" style="margin:-6px 0 16px">Что изменилось за период по сравнению с предыдущим — стоимость, средняя оценка
+  и НОВЫЕ пробелы в базе (которых не было в прошлый раз). Разбивка по всем вопросам без сравнения —
+  <a href="/admin/analytics">страница «Аналитика»</a>, полная выгрузка — <a href="/admin/export.xlsx">Excel-отчёт</a>.</p>
 
 <div class="period-bar">
   <div class="seg" role="group" aria-label="Период">
@@ -54,6 +53,20 @@
   <span class="period-note">Отчёт {{ period_label }}</span>
 </div>
 
+{% if has_comparison %}
+<div class="highlights">
+  <div class="item">💰 Стоимость:
+    {% if cost_delta and cost_delta.abs_pct is not none %}<b class="delta {{ cost_delta.tone }}" style="margin-left:0">{{ cost_delta.arrow }} {{ '%.1f' % cost_delta.abs_pct }}%</b> к прошлому периоду{% else %}нет данных для сравнения{% endif %}
+  </div>
+  <div class="item">⭐ Средняя оценка:
+    {% if rating_delta %}<b class="delta {{ rating_delta.tone }}" style="margin-left:0">{{ rating_delta.arrow }} {{ '%.1f' % rating_delta.abs_value }}</b> к прошлому периоду{% else %}нет данных для сравнения{% endif %}
+  </div>
+  <div class="item">🆕 Новых пробелов в базе: <b>{{ new_gaps_count }}</b></div>
+</div>
+{% else %}
+<p class="hint" style="margin:-10px 0 20px">Сравнение с прошлым периодом недоступно для «Весь период» — выберите 7/30/90 дней или свой диапазон.</p>
+{% endif %}
+
 <div class="report-section">
   <h2>Стоимость</h2>
   <p class="desc">Боевые каналы (Пачка, Omnidesk, Telegram, WhatsApp) — отдельно от тестов со страницы «Тест агента».</p>
@@ -69,6 +82,7 @@
         {% if usage.cost_usd is not none and usage.questions %}≈ ${{ '%.5f' % (usage.cost_usd / usage.questions) }} за вопрос ({{ usage.questions }})
         {% elif usage.cost_usd is none and usage.questions %}часть вопросов — без цены в таблице
         {% else %}пока нет данных за этот период{% endif %}
+        {% if cost_delta and cost_delta.abs_pct is not none %}<span class="delta {{ cost_delta.tone }}">{{ cost_delta.arrow }} {{ '%.1f' % cost_delta.abs_pct }}%</span>{% endif %}
       </div>
     </div>
     <div class="stat">
@@ -98,7 +112,9 @@
     <div class="stat">
       <div class="k">Вопросов в тредах</div>
       <div class="v">{{ overview.questions }}</div>
-      <div class="s">{{ period_label }}</div>
+      <div class="s">{{ period_label }}
+        {% if questions_delta %}<span class="delta {{ questions_delta.tone }}">{{ questions_delta.arrow }} {{ questions_delta.abs_value }}</span>{% endif %}
+      </div>
     </div>
     <div class="stat">
       <div class="k">Оценено</div>
@@ -110,7 +126,9 @@
       <div class="v" style="{% if overview.avg_rating is none %}color:var(--muted){% elif overview.avg_rating >= 8 %}color:var(--ok){% elif overview.avg_rating >= 5 %}color:var(--warn){% else %}color:var(--err){% endif %}">
         {{ overview.avg_rating if overview.avg_rating is not none else '—' }}{% if overview.avg_rating is not none %}<span style="font-size:14px;color:var(--faint)">/10</span>{% endif %}
       </div>
-      <div class="s">по оценённым ответам</div>
+      <div class="s">по оценённым ответам
+        {% if rating_delta %}<span class="delta {{ rating_delta.tone }}">{{ rating_delta.arrow }} {{ '%.1f' % rating_delta.abs_value }}</span>{% endif %}
+      </div>
     </div>
   </div>
   {% if users %}
@@ -138,14 +156,17 @@
 <div class="report-section">
   <h2>Пробелы в базе знаний</h2>
   <p class="desc">Темы, по которым агент отвечал вообще без опоры на базу — сильный кандидат на то, что стоит
-    добавить или расширить в базе. {% if untagged %}Ещё <b>{{ untagged }}</b> вопрос(ов) в логе без темы —
-    разметить можно на странице «Аналитика».{% endif %}</p>
+    добавить или расширить в базе.
+    {% if has_comparison %}Из них <b>{{ new_gaps_count }}</b> {{ 'новая' if new_gaps_count == 1 else 'новых' }} — не было
+    в пробелах прошлый период.{% endif %}
+    {% if untagged %}Ещё <b>{{ untagged }}</b> вопрос(ов) в логе без темы — разметить можно на странице «Аналитика».{% endif %}</p>
   {% if gaps %}
   <div class="card">
     {% for g in gaps %}
     <div class="gap-row">
       <div>
         <a class="topic" href="/admin/analytics/topic/{{ g.topic | urlencode }}">{{ g.topic }}</a>
+        {% if has_comparison and g.is_new %}<span class="badge new">🆕 новый</span>{% endif %}
         <div class="meta">{{ g.questions }} вопрос(ов){% if g.avg_rating is not none %} · средняя оценка {{ g.avg_rating }}/10{% endif %}</div>
       </div>
       <span class="badge err">{{ g.no_sources }} без источников</span>
