@@ -11,7 +11,7 @@ import unicodedata
 import urllib.parse
 import uuid
 import zipfile
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Form, Request, UploadFile, File
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response
@@ -294,27 +294,66 @@ def metrics_user_page(request: Request, asker_user_id: int):
 
 # ---------- аналитика: о чём чаще всего спрашивают, чего не хватает в базе ----------
 
+PERIOD_PRESETS = {"7": 7, "30": 30, "90": 90}
+
+
+def _resolve_period(period: str, date_from: str, date_to: str) -> tuple:
+    """Период → (date_from, date_to) в YYYY-MM-DD для фильтрации query_log, либо
+    (None, None) для «весь период» (текущее поведение аналитики до выбора периода —
+    остаётся значением по умолчанию, чтобы старые ссылки/дашборд не меняли смысл)."""
+    if period == "custom":
+        return (date_from or None, date_to or None)
+    days = PERIOD_PRESETS.get(period)
+    if days:
+        today = datetime.now(timezone.utc).date()
+        start = today - timedelta(days=days - 1)
+        return (start.isoformat(), today.isoformat())
+    return (None, None)
+
+
+def _period_label(period: str, d_from: str, d_to: str) -> str:
+    """Человекочитаемая подпись выбранного периода — для подписей под графиками
+    («Вопросы по дням», «Вопросов в тредах»), чтобы не молчать о том, какие данные
+    сейчас показаны."""
+    if period in PERIOD_PRESETS:
+        return f"за последние {PERIOD_PRESETS[period]} дней"
+    if period == "custom" and d_from and d_to:
+        try:
+            fmt = lambda s: datetime.strptime(s, "%Y-%m-%d").strftime("%d.%m.%Y")  # noqa: E731
+            return f"с {fmt(d_from)} по {fmt(d_to)}"
+        except ValueError:
+            return "за выбранный период"
+    return "за всё время"
+
+
 @router.get("/admin/analytics", response_class=HTMLResponse)
-def analytics_page(request: Request, resolved: int = 0, topic: str = ""):
+def analytics_page(request: Request, resolved: int = 0, topic: str = "",
+                    period: str = "all", date_from: str = "", date_to: str = ""):
     """Объединённая страница «Аналитика»: оценки ответов (бывшие «Метрики») +
-    темы/пробелы — разделены вкладками на одной странице, см. analytics.html."""
+    темы/пробелы — разделены вкладками на одной странице, см. analytics.html.
+    period — выбор периода (7/30/90 дней, custom с датами, all — весь период,
+    по умолчанию), применяется ко всем графикам/таблицам обеих вкладок."""
     auth.require_login(request)
     ctx = _base_ctx(request)
-    stats = db.topic_stats()
+    d_from, d_to = _resolve_period(period, date_from, date_to)
+    stats = db.topic_stats(d_from, d_to)
     gaps = sorted(
         [t for t in stats if t["no_sources"] > 0],
         key=lambda t: t["no_sources"], reverse=True,
     )
     ctx.update({
+        # выбор периода
+        "period": period, "date_from": date_from, "date_to": date_to,
+        "period_label": _period_label(period, d_from or "", d_to or ""),
         # вкладка «Темы и пробелы»
         "topics": stats, "gaps": gaps,
         "untagged": db.count_untagged(),
         "resolved_count": resolved, "resolved_topic": topic,
         "topic_chart": charts.topic_bars(stats),
         # вкладка «Оценки ответов»
-        "overview": db.rating_overview(), "users": db.rating_stats_by_user(),
-        "hist": charts.rating_histogram(db.rating_distribution()),
-        "trend": charts.questions_trend(db.questions_per_day(30)),
+        "overview": db.rating_overview(d_from, d_to), "users": db.rating_stats_by_user(d_from, d_to),
+        "hist": charts.rating_histogram(db.rating_distribution(d_from, d_to)),
+        "trend": charts.questions_trend(db.questions_per_day(30, d_from, d_to)),
     })
     return templates.TemplateResponse("analytics.html", ctx)
 

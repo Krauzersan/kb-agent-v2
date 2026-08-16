@@ -439,15 +439,30 @@ def set_rating(thread_key: str, rating: int) -> bool:
         return True
 
 
-def rating_stats_by_user() -> list:
+def _period_clause(date_from: str | None, date_to: str | None) -> tuple[str, list]:
+    """Общий фрагмент WHERE для фильтра по периоду (по created_at, день в UTC как
+    хранится в БД) — переиспользуется всеми аналитическими выборками аналитики,
+    чтобы выбор периода на странице применялся одинаково ко всем графикам/таблицам."""
+    clauses, params = [], []
+    if date_from:
+        clauses.append("substr(created_at, 1, 10) >= ?")
+        params.append(date_from)
+    if date_to:
+        clauses.append("substr(created_at, 1, 10) <= ?")
+        params.append(date_to)
+    return (" AND " + " AND ".join(clauses)) if clauses else "", params
+
+
+def rating_stats_by_user(date_from: str | None = None, date_to: str | None = None) -> list:
     """Статистика по авторам вопросов (Пачка): сколько спросили и как оценивают ответы —
     для страницы «Метрики». Отсортировано по числу вопросов (кто чаще всего спрашивает)."""
+    extra, params = _period_clause(date_from, date_to)
     with _lock, _conn() as con:
         rows = con.execute(
             "SELECT COALESCE(asker_name, 'Неизвестно') AS asker_name, asker_user_id, "
             "COUNT(*) AS questions, COUNT(rating) AS rated, AVG(rating) AS avg_rating "
-            "FROM query_log WHERE thread_key IS NOT NULL "
-            "GROUP BY asker_user_id, asker_name ORDER BY questions DESC"
+            f"FROM query_log WHERE thread_key IS NOT NULL{extra} "
+            "GROUP BY asker_user_id, asker_name ORDER BY questions DESC", params,
         ).fetchall()
     out = []
     for r in rows:
@@ -457,44 +472,62 @@ def rating_stats_by_user() -> list:
     return out
 
 
-def rating_overview() -> dict:
+def rating_overview(date_from: str | None = None, date_to: str | None = None) -> dict:
+    extra, params = _period_clause(date_from, date_to)
     with _lock, _conn() as con:
         row = con.execute(
             "SELECT COUNT(*) AS questions, COUNT(rating) AS rated, AVG(rating) AS avg_rating "
-            "FROM query_log WHERE thread_key IS NOT NULL"
+            f"FROM query_log WHERE thread_key IS NOT NULL{extra}", params,
         ).fetchone()
     d = dict(row)
     d["avg_rating"] = round(d["avg_rating"], 1) if d["avg_rating"] is not None else None
     return d
 
 
-def rating_distribution() -> list:
+def rating_distribution(date_from: str | None = None, date_to: str | None = None) -> list:
     """[{rating: 1..10, count}] — сколько раз ставили каждую оценку, для гистограммы
     на дашборде. Только реально оценённые ответы (rating IS NOT NULL); все 10 значений
     возвращаются всегда, даже с count=0, чтобы столбики на графике не «прыгали»."""
+    extra, params = _period_clause(date_from, date_to)
     with _lock, _conn() as con:
         rows = con.execute(
             "SELECT rating, COUNT(*) AS count FROM query_log "
-            "WHERE rating IS NOT NULL GROUP BY rating"
+            f"WHERE rating IS NOT NULL{extra} GROUP BY rating", params,
         ).fetchall()
     counts = {int(r["rating"]): int(r["count"]) for r in rows}
     return [{"rating": v, "count": counts.get(v, 0)} for v in range(1, 11)]
 
 
-def questions_per_day(days: int = 30) -> list:
-    """[{date: 'YYYY-MM-DD', count}] за последние `days` дней (включая сегодня),
-    по created_at, все каналы. Дни без вопросов возвращаются с count=0 — без
-    зазоров, чтобы линия на графике не «телепортировалась»."""
-    since = (datetime.now(timezone.utc) - timedelta(days=days - 1)).strftime("%Y-%m-%d")
+def questions_per_day(days: int = 30, date_from: str | None = None, date_to: str | None = None) -> list:
+    """[{date: 'YYYY-MM-DD', count}] по created_at, все каналы. Дни без вопросов
+    возвращаются с count=0 — без зазоров, чтобы линия на графике не «телепортировалась».
+    Без date_from/date_to — последние `days` дней (включая сегодня), как раньше.
+    С ними — весь диапазон периода, выбранного на странице аналитики (потолок 366
+    дней, чтобы линия на графике не расползлась на сотни точек при периоде «весь
+    период» на многолетней базе)."""
+    if date_from and date_to:
+        start_date = datetime.strptime(date_from, "%Y-%m-%d").date()
+        end_date = datetime.strptime(date_to, "%Y-%m-%d").date()
+        if end_date < start_date:
+            start_date, end_date = end_date, start_date
+        span = min((end_date - start_date).days + 1, 366)
+        end_date = start_date + timedelta(days=span - 1)
+    else:
+        end_date = datetime.now(timezone.utc).date()
+        start_date = end_date - timedelta(days=days - 1)
+        span = days
+    since = start_date.strftime("%Y-%m-%d")
+    until = end_date.strftime("%Y-%m-%d")
     with _lock, _conn() as con:
         rows = con.execute(
             "SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS count FROM query_log "
-            "WHERE substr(created_at, 1, 10) >= ? GROUP BY day", (since,),
+            "WHERE substr(created_at, 1, 10) >= ? AND substr(created_at, 1, 10) <= ? GROUP BY day",
+            (since, until),
         ).fetchall()
     counts = {r["day"]: int(r["count"]) for r in rows}
     out = []
-    for i in range(days):
-        d = (datetime.now(timezone.utc) - timedelta(days=days - 1 - i)).strftime("%Y-%m-%d")
+    for i in range(span):
+        d = (start_date + timedelta(days=i)).strftime("%Y-%m-%d")
         out.append({"date": d, "count": counts.get(d, 0)})
     return out
 
@@ -561,7 +594,7 @@ def query_rows_by_ids(ids: list) -> list:
         return [dict(r) for r in rows]
 
 
-def topic_stats() -> list:
+def topic_stats(date_from: str | None = None, date_to: str | None = None) -> list:
     """[{topic, questions, rated, avg_rating, no_sources}] — для страницы аналитики.
     no_sources — сколько вопросов темы agent ответил вообще без опоры на базу (пустые
     источники) И ЕЩЁ НЕ ПОМЕЧЕНЫ ИСПРАВЛЕННЫМИ: сильный сигнал, что тему стоит
@@ -569,14 +602,15 @@ def topic_stats() -> list:
     просто неточным, а не отсутствующим). Если админ пометил пробел исправленным
     (resolve_topic_gaps), эти старые строки в счётчик уже не попадают — но новый
     безысточниковый ответ по той же теме снова его поднимет."""
+    extra, params = _period_clause(date_from, date_to)
     with _lock, _conn() as con:
         rows = con.execute(
             "SELECT topic, COUNT(*) AS questions, COUNT(rating) AS rated, "
             "AVG(rating) AS avg_rating, "
             "SUM(CASE WHEN (sources IS NULL OR sources = '' OR sources = '[]') "
             "AND resolved = 0 THEN 1 ELSE 0 END) AS no_sources "
-            "FROM query_log WHERE topic IS NOT NULL AND topic != '' "
-            "GROUP BY topic ORDER BY questions DESC"
+            f"FROM query_log WHERE topic IS NOT NULL AND topic != ''{extra} "
+            "GROUP BY topic ORDER BY questions DESC", params,
         ).fetchall()
     out = []
     for r in rows:

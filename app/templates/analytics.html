@@ -33,6 +33,21 @@
   .viz-dot:hover, .viz-dot:focus-visible{r:6px; outline:none}
   .viz-tier-legend{display:flex; gap:14px; align-items:center; margin-top:10px; font-size:12px; color:var(--muted)}
   .viz-tier-legend .dot{display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:5px; vertical-align:-1px}
+
+  /* Выбор периода — .seg переиспользует контейнер из base.html (сегментированный
+     переключатель), но пункты здесь — ссылки (полная перезагрузка страницы с новым
+     query, т.к. данные считаются на сервере), а не button, поэтому стили для .seg a
+     дублируют .seg button из base.html. */
+  .period-bar{display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin:0 0 18px}
+  .seg a{background:transparent; color:var(--muted); border:none; padding:6px 13px; border-radius:7px;
+    font-size:13px; font-weight:530; text-decoration:none; cursor:pointer; line-height:1.5}
+  .seg a:hover{background:var(--surface); color:var(--text)}
+  .seg a.active{background:var(--surface); color:var(--text); box-shadow:var(--shadow-sm); font-weight:600}
+  [data-theme="dark"] .seg a.active{background:var(--surface-3); color:var(--text)}
+  .period-custom{display:flex; align-items:center; gap:6px}
+  .period-custom input[type=date]{padding:6px 9px; font-size:13px}
+  .period-custom .dash{color:var(--faint)}
+  .period-note{color:var(--muted); font-size:12.5px}
 </style>
 {% endblock %}
 
@@ -47,6 +62,24 @@
     Скачать Excel-отчёт
   </a>
   <span class="hint">Обзор (с дайджестом за неделю), проблемные ответы (низкая оценка или ответ без опоры на базу) и полный лог — одним файлом.</span>
+</div>
+
+<div class="period-bar">
+  <div class="seg" role="group" aria-label="Период">
+    <a href="?period=7" class="{{ 'active' if period == '7' }}">7 дней</a>
+    <a href="?period=30" class="{{ 'active' if period == '30' }}">30 дней</a>
+    <a href="?period=90" class="{{ 'active' if period == '90' }}">90 дней</a>
+    <a href="?period=all" class="{{ 'active' if period == 'all' }}">Весь период</a>
+  </div>
+  <form method="get" action="/admin/analytics" class="period-custom">
+    <input type="hidden" name="period" value="custom">
+    <input type="date" name="date_from" value="{{ date_from }}" aria-label="С какой даты" required>
+    <span class="dash">—</span>
+    <input type="date" name="date_to" value="{{ date_to }}" aria-label="По какую дату" required>
+    <button class="ghost sm{% if period == 'custom' %} active{% endif %}" type="submit"
+            style="{% if period == 'custom' %}background:var(--surface-2); border-color:var(--accent); color:var(--accent-text){% endif %}">Свой период</button>
+  </form>
+  <span class="period-note">Показано {{ period_label }}</span>
 </div>
 
 <div class="tabs" id="tabs">
@@ -65,7 +98,7 @@
     <div class="stat">
       <div class="k">Вопросов в тредах</div>
       <div class="v">{{ overview.questions }}</div>
-      <div class="s">всего за всё время</div>
+      <div class="s">{{ period_label }}</div>
     </div>
     <div class="stat">
       <div class="k">Оценено</div>
@@ -108,7 +141,7 @@
 
     <div class="card viz-card">
       <h2>Вопросы по дням</h2>
-      <p class="desc">Обращения к агенту за последние 30 дней, по всем каналам.</p>
+      <p class="desc">Обращения к агенту {{ period_label }}, по всем каналам.</p>
       {% if trend.max_count %}
         <svg viewBox="0 0 {{ trend.width }} {{ trend.height + 18 }}" style="width:100%; height:auto" role="img" aria-label="Вопросы по дням за последние 30 дней">
           <line x1="0" y1="{{ trend.height }}" x2="{{ trend.width }}" y2="{{ trend.height }}" class="viz-baseline"/>
@@ -183,8 +216,8 @@
   {% endif %}
 
   <p class="desc" style="margin:-4px 0 16px">О чём чаще всего спрашивают агента и какие темы стоит дополнить
-    в базе знаний. Темы определяются автоматически той же моделью, что отвечает агенту — по кнопке ниже,
-    не в реальном времени на каждый вопрос.</p>
+    в базе знаний — показано {{ period_label }}. Темы определяются автоматически той же моделью, что отвечает
+    агенту — по кнопке ниже, не в реальном времени на каждый вопрос.</p>
 
   <div class="card" style="margin-bottom:18px">
     <h2>Разметка тем</h2>
