@@ -361,6 +361,34 @@ def analytics_page(request: Request, resolved: int = 0, topic: str = "",
     return templates.TemplateResponse("analytics.html", ctx)
 
 
+@router.get("/admin/report", response_class=HTMLResponse)
+def report_page(request: Request, period: str = "30", date_from: str = "", date_to: str = ""):
+    """Отчёт на экране: сводка по стоимости, оценкам и пробелам в базе за выбранный
+    период — на экран, а не на почту/в Пачку и не файлом (тот же дайджест, что и
+    Excel-выгрузка/аналитика, но без скачивания, для быстрого просмотра прямо в
+    панели). По умолчанию — последние 30 дней, а не «весь период», как в аналитике:
+    отчёт по смыслу — снимок за недавнее время, а не архив за всю историю."""
+    auth.require_login(request)
+    ctx = _base_ctx(request)
+    d_from, d_to = _resolve_period(period, date_from, date_to)
+    stats = db.topic_stats(d_from, d_to)
+    gaps = sorted(
+        [t for t in stats if t["no_sources"] > 0],
+        key=lambda t: t["no_sources"], reverse=True,
+    )
+    ctx.update({
+        "period": period, "date_from": date_from, "date_to": date_to,
+        "period_label": _period_label(period, d_from or "", d_to or ""),
+        "overview": db.rating_overview(d_from, d_to),
+        "users": db.rating_stats_by_user(d_from, d_to),
+        "usage": db.usage_totals(d_from, d_to, is_test=False),
+        "usage_test": db.usage_totals(d_from, d_to, is_test=True),
+        "topics": stats, "gaps": gaps,
+        "untagged": db.count_untagged(),
+    })
+    return templates.TemplateResponse("report.html", ctx)
+
+
 @router.get("/admin/analytics/topic/{topic_name}", response_class=HTMLResponse)
 def analytics_topic_page(request: Request, topic_name: str):
     auth.require_login(request)

@@ -184,6 +184,21 @@
     .seg button.active{background:var(--surface); color:var(--text); box-shadow:var(--shadow-sm); font-weight:600}
     [data-theme="dark"] .seg button.active{background:var(--surface-3); color:var(--text)}
 
+    /* Выбор периода (страницы «Аналитика» и «Отчёт») — .seg переиспользует контейнер
+       выше, но пункты здесь — ссылки (полная перезагрузка страницы с новым query,
+       т.к. данные считаются на сервере), а не button, поэтому стили для .seg a
+       дублируют .seg button. */
+    .period-bar{display:flex; flex-wrap:wrap; align-items:center; gap:10px; margin:0 0 18px}
+    .seg a{background:transparent; color:var(--muted); border:none; padding:6px 13px; border-radius:7px;
+      font-size:13px; font-weight:530; text-decoration:none; cursor:pointer; line-height:1.5}
+    .seg a:hover{background:var(--surface); color:var(--text)}
+    .seg a.active{background:var(--surface); color:var(--text); box-shadow:var(--shadow-sm); font-weight:600}
+    [data-theme="dark"] .seg a.active{background:var(--surface-3); color:var(--text)}
+    .period-custom{display:flex; align-items:center; gap:6px}
+    .period-custom input[type=date]{padding:6px 9px; font-size:13px}
+    .period-custom .dash{color:var(--faint)}
+    .period-note{color:var(--muted); font-size:12.5px}
+
     /* ползунок */
     .slider-row{display:flex; align-items:center; gap:13px}
     input[type=range]{flex:1; accent-color:var(--accent); height:5px; cursor:pointer; width:auto}

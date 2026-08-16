@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+{% block title %}Отчёт — база знаний{% endblock %}
+{% block page_title %}Отчёт{% endblock %}
+{% block actions %}
+  <a class="btn ghost sm" href="/admin/analytics?period={{ period }}&date_from={{ date_from }}&date_to={{ date_to }}">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 3v18h18"/><path d="M7 15l4-4 3 3 5-6"/></svg>
+    К аналитике
+  </a>
+  <button class="ghost sm" type="button" onclick="window.print()">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M6 9V2h12v7"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><path d="M6 14h12v8H6z"/></svg>
+    Печать / PDF
+  </button>
+{% endblock %}
+
+{% block head_extra %}
+<style>
+  .report-section{margin-bottom:22px}
+  .report-section h2{margin-bottom:3px}
+  .report-section .desc{margin:0 0 12px}
+  .gap-row{display:flex; align-items:center; justify-content:space-between; gap:12px;
+    padding:10px 0; border-bottom:1px solid var(--line)}
+  .gap-row:last-child{border-bottom:none}
+  .gap-row .topic{font-weight:560}
+  .gap-row .meta{color:var(--muted); font-size:12.5px; margin-top:2px}
+  @media print{
+    .sidebar, .topbar, .period-bar{display:none !important}
+    .content{margin:0; padding:0}
+    .card{break-inside:avoid; border-color:#ccc !important}
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<p class="desc" style="margin:-6px 0 16px">Сводка на экран: стоимость, оценки и пробелы в базе знаний за период —
+  без скачивания файла. Полная выгрузка со всеми вопросами — <a href="/admin/export.xlsx">Excel-отчёт</a>,
+  разбивка по вкладкам — <a href="/admin/analytics">страница «Аналитика»</a>.</p>
+
+<div class="period-bar">
+  <div class="seg" role="group" aria-label="Период">
+    <a href="?period=7" class="{{ 'active' if period == '7' }}">7 дней</a>
+    <a href="?period=30" class="{{ 'active' if period == '30' }}">30 дней</a>
+    <a href="?period=90" class="{{ 'active' if period == '90' }}">90 дней</a>
+    <a href="?period=all" class="{{ 'active' if period == 'all' }}">Весь период</a>
+  </div>
+  <form method="get" action="/admin/report" class="period-custom">
+    <input type="hidden" name="period" value="custom">
+    <input type="date" name="date_from" value="{{ date_from }}" aria-label="С какой даты" required>
+    <span class="dash">—</span>
+    <input type="date" name="date_to" value="{{ date_to }}" aria-label="По какую дату" required>
+    <button class="ghost sm{% if period == 'custom' %} active{% endif %}" type="submit"
+            style="{% if period == 'custom' %}background:var(--surface-2); border-color:var(--accent); color:var(--accent-text){% endif %}">Свой период</button>
+  </form>
+  <span class="period-note">Отчёт {{ period_label }}</span>
+</div>
+
+<div class="report-section">
+  <h2>Стоимость</h2>
+  <p class="desc">Боевые каналы (Пачка, Omnidesk, Telegram, WhatsApp) — отдельно от тестов со страницы «Тест агента».</p>
+  <div class="grid c4">
+    <div class="stat">
+      <div class="k">Стоимость (боевые)</div>
+      <div class="v" style="{% if usage.cost_usd is none %}font-size:20px; color:var(--muted){% endif %}">
+        {% if not usage.questions %}<span class="faint">—</span>
+        {% elif usage.cost_usd is none %}неизвестно
+        {% else %}${{ '%.4f' % usage.cost_usd }}{% endif %}
+      </div>
+      <div class="s">
+        {% if usage.cost_usd is not none and usage.questions %}≈ ${{ '%.5f' % (usage.cost_usd / usage.questions) }} за вопрос ({{ usage.questions }})
+        {% elif usage.cost_usd is none and usage.questions %}часть вопросов — без цены в таблице
+        {% else %}пока нет данных за этот период{% endif %}
+      </div>
+    </div>
+    <div class="stat">
+      <div class="k">Токены (вход/выход)</div>
+      <div class="v" style="font-size:19px">{{ '{:,}'.format(usage.tokens_in).replace(',', ' ') }} / {{ '{:,}'.format(usage.tokens_out).replace(',', ' ') }}</div>
+      <div class="s">без учёта кэша</div>
+    </div>
+    <div class="stat">
+      <div class="k">Кэш: чтение / запись</div>
+      <div class="v" style="font-size:19px">{{ '{:,}'.format(usage.tokens_cache_read).replace(',', ' ') }} / {{ '{:,}'.format(usage.tokens_cache_write).replace(',', ' ') }}</div>
+      <div class="s">чтение дешевле обычного входа</div>
+    </div>
+    <div class="stat">
+      <div class="k">Тесты в панели</div>
+      <div class="v" style="font-size:19px; color:var(--muted)">
+        {% if usage_test.cost_usd is none %}—{% else %}${{ '%.4f' % usage_test.cost_usd }}{% endif %}
+      </div>
+      <div class="s">{{ usage_test.questions }} вопрос(ов) — не в счёт клиентам</div>
+    </div>
+  </div>
+</div>
+
+<div class="report-section">
+  <h2>Оценки ответов</h2>
+  <p class="desc">Только вопросы в тредах Пачки — там включена оценка от 1 до 10.</p>
+  <div class="grid c3">
+    <div class="stat">
+      <div class="k">Вопросов в тредах</div>
+      <div class="v">{{ overview.questions }}</div>
+      <div class="s">{{ period_label }}</div>
+    </div>
+    <div class="stat">
+      <div class="k">Оценено</div>
+      <div class="v">{{ overview.rated }}</div>
+      <div class="s">{% if overview.questions %}{{ (100 * overview.rated / overview.questions) | round | int }}% от всех вопросов{% else %}пока нет данных{% endif %}</div>
+    </div>
+    <div class="stat">
+      <div class="k">Средняя оценка</div>
+      <div class="v" style="{% if overview.avg_rating is none %}color:var(--muted){% elif overview.avg_rating >= 8 %}color:var(--ok){% elif overview.avg_rating >= 5 %}color:var(--warn){% else %}color:var(--err){% endif %}">
+        {{ overview.avg_rating if overview.avg_rating is not none else '—' }}{% if overview.avg_rating is not none %}<span style="font-size:14px;color:var(--faint)">/10</span>{% endif %}
+      </div>
+      <div class="s">по оценённым ответам</div>
+    </div>
+  </div>
+  {% if users %}
+  <div class="table-wrap" style="margin-top:14px">
+    <table>
+      <thead><tr><th>Сотрудник</th><th style="text-align:right">Вопросов</th><th style="text-align:right">Средняя оценка</th></tr></thead>
+      <tbody>
+        {% for u in users[:8] %}
+        <tr>
+          <td>{{ u.asker_name }}</td>
+          <td style="text-align:right">{{ u.questions }}</td>
+          <td style="text-align:right">
+            {% if u.avg_rating is none %}<span class="faint">—</span>
+            {% else %}<span class="badge {% if u.avg_rating >= 8 %}ok{% elif u.avg_rating >= 5 %}warn{% else %}err{% endif %}">{{ u.avg_rating }}/10</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if users|length > 8 %}<p class="hint" style="margin-top:6px">И ещё {{ users|length - 8 }} — полный список на странице «Аналитика».</p>{% endif %}
+  {% endif %}
+</div>
+
+<div class="report-section">
+  <h2>Пробелы в базе знаний</h2>
+  <p class="desc">Темы, по которым агент отвечал вообще без опоры на базу — сильный кандидат на то, что стоит
+    добавить или расширить в базе. {% if untagged %}Ещё <b>{{ untagged }}</b> вопрос(ов) в логе без темы —
+    разметить можно на странице «Аналитика».{% endif %}</p>
+  {% if gaps %}
+  <div class="card">
+    {% for g in gaps %}
+    <div class="gap-row">
+      <div>
+        <a class="topic" href="/admin/analytics/topic/{{ g.topic | urlencode }}">{{ g.topic }}</a>
+        <div class="meta">{{ g.questions }} вопрос(ов){% if g.avg_rating is not none %} · средняя оценка {{ g.avg_rating }}/10{% endif %}</div>
+      </div>
+      <span class="badge err">{{ g.no_sources }} без источников</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="card"><div class="empty"><div class="ico">✅</div>За этот период открытых пробелов нет.</div></div>
+  {% endif %}
+</div>
+
+{% endblock %}
