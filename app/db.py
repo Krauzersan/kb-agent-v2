@@ -552,7 +552,8 @@ def questions_per_day(days: int = 30, date_from: str | None = None, date_to: str
     with _lock, _conn() as con:
         rows = con.execute(
             "SELECT substr(created_at, 1, 10) AS day, COUNT(*) AS count FROM query_log "
-            "WHERE substr(created_at, 1, 10) >= ? AND substr(created_at, 1, 10) <= ? GROUP BY day",
+            "WHERE substr(created_at, 1, 10) >= ? AND substr(created_at, 1, 10) <= ? "
+            "AND is_test = 0 GROUP BY day",
             (since, until),
         ).fetchall()
     counts = {r["day"]: int(r["count"]) for r in rows}
@@ -632,16 +633,21 @@ def topics_list() -> list:
 
 
 def untagged_query_ids(limit: int = 25) -> list:
+    """Тестовые вопросы («Тест агента» в панели, is_test=1) сюда не попадают —
+    незачем тратить токены LLM на их разметку темой, они не в счётчике пробелов."""
     with _lock, _conn() as con:
         rows = con.execute(
-            "SELECT id FROM query_log WHERE topic IS NULL ORDER BY id ASC LIMIT ?", (limit,)
+            "SELECT id FROM query_log WHERE topic IS NULL AND is_test = 0 ORDER BY id ASC LIMIT ?",
+            (limit,),
         ).fetchall()
         return [int(r["id"]) for r in rows]
 
 
 def count_untagged() -> int:
     with _lock, _conn() as con:
-        row = con.execute("SELECT COUNT(*) c FROM query_log WHERE topic IS NULL").fetchone()
+        row = con.execute(
+            "SELECT COUNT(*) c FROM query_log WHERE topic IS NULL AND is_test = 0"
+        ).fetchone()
         return int(row["c"])
 
 
@@ -663,7 +669,10 @@ def topic_stats(date_from: str | None = None, date_to: str | None = None) -> lis
     добавить/расширить в базе знаний, надёжнее низкой оценки (там ответ мог быть
     просто неточным, а не отсутствующим). Если админ пометил пробел исправленным
     (resolve_topic_gaps), эти старые строки в счётчик уже не попадают — но новый
-    безысточниковый ответ по той же теме снова его поднимет."""
+    безысточниковый ответ по той же теме снова его поднимет. Тестовые вопросы
+    («Тест агента» в панели, is_test=1) исключены — иначе прогон тестов создавал бы
+    ложные «пробелы в базе» и темы по вопросам, которых от реальных пользователей
+    не было."""
     extra, params = _period_clause(date_from, date_to)
     with _lock, _conn() as con:
         rows = con.execute(
@@ -671,7 +680,7 @@ def topic_stats(date_from: str | None = None, date_to: str | None = None) -> lis
             "AVG(rating) AS avg_rating, "
             "SUM(CASE WHEN (sources IS NULL OR sources = '' OR sources = '[]') "
             "AND resolved = 0 THEN 1 ELSE 0 END) AS no_sources "
-            f"FROM query_log WHERE topic IS NOT NULL AND topic != ''{extra} "
+            f"FROM query_log WHERE topic IS NOT NULL AND topic != '' AND is_test = 0{extra} "
             "GROUP BY topic ORDER BY questions DESC", params,
         ).fetchall()
     out = []
@@ -724,11 +733,13 @@ def topic_examples(topic: str, limit: int = 12) -> list:
 
 
 def all_query_log_for_export(limit: int = 20000) -> list:
-    """Весь лог вопросов для Excel-отчёта (см. export.py) — без пагинации, но с
-    разумным потолком, чтобы не утащить в память лог за годы работы одним куском."""
+    """Весь БОЕВОЙ лог вопросов для Excel-отчёта (см. export.py) — без пагинации, но
+    с разумным потолком, чтобы не утащить в память лог за годы работы одним куском.
+    Тестовые вопросы («Тест агента» в панели, is_test=1) исключены — иначе попадали
+    бы в «проблемные ответы» и общий лог наравне с реальными обращениями клиентов."""
     with _lock, _conn() as con:
         rows = con.execute(
-            "SELECT * FROM query_log ORDER BY id DESC LIMIT ?", (limit,),
+            "SELECT * FROM query_log WHERE is_test = 0 ORDER BY id DESC LIMIT ?", (limit,),
         ).fetchall()
     out = []
     for r in rows:
