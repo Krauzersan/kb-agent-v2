@@ -3,7 +3,7 @@
 {% block page_title %}Лог вопросов{% endblock %}
 {% block actions %}
   <form method="post" action="/admin/logs/clear" style="display:inline"
-        onsubmit="return confirm('Удалить весь лог вопросов? Это необратимо.')">
+        onsubmit="return confirm('Удалить весь лог вопросов? Вместе с ним удалятся ОЦЕНКИ ответов, разметка тем и данные о токенах/стоимости — они хранятся в тех же записях. Перед удалением система сама сделает бэкап БД на диск, но восстановление — вручную через администратора сервера, не кнопкой в панели.')">
     <button class="ghost sm danger" type="submit">Очистить лог</button>
   </form>
 {% endblock %}

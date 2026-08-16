@@ -790,10 +790,45 @@ def count_query_log(q: str = "") -> int:
     return int(row["c"]) if row else 0
 
 
+_LOG_BACKUPS_TO_KEEP = 5
+
+
+def _backup_before_clear() -> None:
+    """Полный бэкап БД перед очисткой лога вопросов — 2026-08-16 админ случайно
+    стёр лог, не зная, что вместе с ним пропадают и оценки (rating хранится в той
+    же таблице query_log), и бэкапа не было. Через sqlite3 Connection.backup() —
+    безопасно даже с открытой БД в WAL-режиме (не сырое копирование файла, которое
+    могло бы не подхватить незакоммиченные страницы из -wal). Храним последние
+    _LOG_BACKUPS_TO_KEEP, чтобы не копить бэкапы бесконечно при частой очистке."""
+    backups_dir = os.path.join(settings.DATA_DIR_ABS, "backups")
+    os.makedirs(backups_dir, exist_ok=True)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
+    backup_path = os.path.join(backups_dir, f"app.db.bak-before-clear-log-{stamp}")
+    with _conn() as con:
+        dest = sqlite3.connect(backup_path)
+        try:
+            con.backup(dest)
+        finally:
+            dest.close()
+    existing = sorted(
+        f for f in os.listdir(backups_dir) if f.startswith("app.db.bak-before-clear-log-")
+    )
+    for old in existing[:-_LOG_BACKUPS_TO_KEEP]:
+        os.remove(os.path.join(backups_dir, old))
+
+
 def clear_query_log() -> int:
-    with _lock, _conn() as con:
-        cur = con.execute("DELETE FROM query_log")
-        return cur.rowcount
+    """Полностью очищает лог вопросов — вместе с ним пропадают ОЦЕНКИ (rating),
+    токены/стоимость и разметка тем: всё это хранится в той же таблице query_log,
+    отдельно не сохраняется. Перед удалением делаем полный бэкап БД на диск (см.
+    _backup_before_clear) — чтобы случайный клик всегда был обратим. Бэкап и
+    удаление — под одним _lock, иначе в щели между ними мог бы залогироваться
+    новый вопрос, не попавший в бэкап, и тут же стереться следующей строкой."""
+    with _lock:
+        _backup_before_clear()
+        with _conn() as con:
+            cur = con.execute("DELETE FROM query_log")
+            return cur.rowcount
 
 
 def get_admin_user(email: str):
