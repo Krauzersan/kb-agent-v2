@@ -82,6 +82,44 @@
   <span class="period-note">Показано {{ period_label }}</span>
 </div>
 
+<div class="card" style="margin-bottom:18px">
+  <h2>Токены и стоимость</h2>
+  <p class="desc">Сколько токенов потратили у LLM-провайдера и сколько это стоило — по всем каналам,
+    включая «Тест агента» в панели, {{ period_label }}.</p>
+  <div class="grid c4">
+    <div class="stat">
+      <div class="k">Стоимость</div>
+      <div class="v" style="{% if usage.cost_usd is none %}font-size:20px; color:var(--muted){% endif %}">
+        {% if not usage.questions %}<span class="faint">—</span>
+        {% elif usage.cost_usd is none %}неизвестно
+        {% else %}${{ '%.4f' % usage.cost_usd }}{% endif %}
+      </div>
+      <div class="s">
+        {% if usage.cost_usd is not none and usage.questions %}≈ ${{ '%.5f' % (usage.cost_usd / usage.questions) }} за вопрос ({{ usage.questions }})
+        {% elif usage.cost_usd is none and usage.questions %}часть вопросов — через провайдера без цены в таблице
+        {% else %}пока нет данных за этот период{% endif %}
+      </div>
+    </div>
+    <div class="stat">
+      <div class="k">Входные токены</div>
+      <div class="v">{{ '{:,}'.format(usage.tokens_in).replace(',', ' ') }}</div>
+      <div class="s">без учёта кэша (см. ниже)</div>
+    </div>
+    <div class="stat">
+      <div class="k">Выходные токены</div>
+      <div class="v">{{ '{:,}'.format(usage.tokens_out).replace(',', ' ') }}</div>
+      <div class="s">ответы модели</div>
+    </div>
+    <div class="stat">
+      <div class="k">Кэш: чтение / запись</div>
+      <div class="v" style="font-size:19px">
+        {{ '{:,}'.format(usage.tokens_cache_read).replace(',', ' ') }} / {{ '{:,}'.format(usage.tokens_cache_write).replace(',', ' ') }}
+      </div>
+      <div class="s">чтение дешевле обычного входа</div>
+    </div>
+  </div>
+</div>
+
 <div class="tabs" id="tabs">
   <button type="button" data-p="ratings">Оценки ответов</button>
   <button type="button" data-p="topics">Темы и пробелы</button>

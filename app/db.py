@@ -122,6 +122,20 @@ def init_db() -> None:
         # по конкретным старым ответам).
         if "resolved" not in cols:
             con.execute("ALTER TABLE query_log ADD COLUMN resolved INTEGER NOT NULL DEFAULT 0")
+        # Токены/стоимость ответа (см. usage_tracker.py) — сколько реально потратили
+        # на этот вопрос у LLM-провайдера. cost_usd = NULL, если провайдер/модель без
+        # цены в usage_tracker (например переключились на OpenAI/GigaChat) — это
+        # осознанно «неизвестно», а не 0.
+        if "tokens_in" not in cols:
+            con.execute("ALTER TABLE query_log ADD COLUMN tokens_in INTEGER")
+        if "tokens_out" not in cols:
+            con.execute("ALTER TABLE query_log ADD COLUMN tokens_out INTEGER")
+        if "tokens_cache_write" not in cols:
+            con.execute("ALTER TABLE query_log ADD COLUMN tokens_cache_write INTEGER")
+        if "tokens_cache_read" not in cols:
+            con.execute("ALTER TABLE query_log ADD COLUMN tokens_cache_read INTEGER")
+        if "cost_usd" not in cols:
+            con.execute("ALTER TABLE query_log ADD COLUMN cost_usd REAL")
 
         # Без индексов эти колонки сканируются полностью на каждый запрос — аналитика,
         # темы/пробелы, история конкретного треда/пользователя. С ростом лога (тысячи
@@ -414,13 +428,20 @@ def search_fts(query: str, limit: int = 50) -> list:
 # ---------- лог вопросов (отладочная панель) ----------
 
 def log_query(channel: str, mode: str, question: str, answer: str, sources: list,
-              thread_key: str = None, asker_user_id: int = None, asker_name: str = None) -> int:
+              thread_key: str = None, asker_user_id: int = None, asker_name: str = None,
+              usage: dict = None) -> int:
+    usage = usage or {}
     with _lock, _conn() as con:
         cur = con.execute(
             "INSERT INTO query_log (created_at, channel, mode, question, answer, sources, "
-            "thread_key, asker_user_id, asker_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "thread_key, asker_user_id, asker_name, tokens_in, tokens_out, "
+            "tokens_cache_write, tokens_cache_read, cost_usd) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (_now(), channel, mode, question, answer,
-             json.dumps(sources, ensure_ascii=False), thread_key, asker_user_id, asker_name),
+             json.dumps(sources, ensure_ascii=False), thread_key, asker_user_id, asker_name,
+             usage.get("tokens_in"), usage.get("tokens_out"),
+             usage.get("cache_write_tokens"), usage.get("cache_read_tokens"),
+             usage.get("cost_usd")),
         )
         return int(cur.lastrowid)
 
@@ -532,6 +553,31 @@ def questions_per_day(days: int = 30, date_from: str | None = None, date_to: str
         d = (start_date + timedelta(days=i)).strftime("%Y-%m-%d")
         out.append({"date": d, "count": counts.get(d, 0)})
     return out
+
+
+def usage_totals(date_from: str | None = None, date_to: str | None = None) -> dict:
+    """Токены/стоимость за период — по ВСЕМ каналам (включая «Тест агента» в панели),
+    в отличие от rating_overview/rating_stats_by_user (только реальные вопросы Пачки):
+    трата денег у провайдера не зависит от того, тестовый это вопрос или нет.
+    cost_usd = NULL, если хотя бы у одной строки период стоимость неизвестна
+    (см. usage_tracker.py — провайдер/модель без цены в таблице), иначе сумма."""
+    extra, params = _period_clause(date_from, date_to)
+    with _lock, _conn() as con:
+        row = con.execute(
+            "SELECT COUNT(*) AS questions, "
+            "SUM(tokens_in) AS tokens_in, SUM(tokens_out) AS tokens_out, "
+            "SUM(tokens_cache_write) AS tokens_cache_write, SUM(tokens_cache_read) AS tokens_cache_read, "
+            "SUM(cost_usd) AS cost_usd, "
+            "SUM(CASE WHEN tokens_in IS NOT NULL AND cost_usd IS NULL THEN 1 ELSE 0 END) AS unknown_cost_rows "
+            f"FROM query_log WHERE 1=1{extra}", params,
+        ).fetchone()
+    d = dict(row)
+    d["tokens_in"] = int(d["tokens_in"] or 0)
+    d["tokens_out"] = int(d["tokens_out"] or 0)
+    d["tokens_cache_write"] = int(d["tokens_cache_write"] or 0)
+    d["tokens_cache_read"] = int(d["tokens_cache_read"] or 0)
+    d["cost_usd"] = None if d["unknown_cost_rows"] else (round(d["cost_usd"], 4) if d["cost_usd"] is not None else 0.0)
+    return d
 
 
 def list_by_asker(asker_user_id: int, limit: int = 200) -> list:

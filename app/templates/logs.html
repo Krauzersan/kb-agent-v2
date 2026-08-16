@@ -48,6 +48,11 @@
       {% if e.rating is not none %}
         <span class="badge {% if e.rating >= 8 %}ok{% elif e.rating >= 5 %}warn{% else %}err{% endif %}">оценка: {{ e.rating }}/10</span>
       {% endif %}
+      {% if e.tokens_in is not none %}
+        <span class="badge neutral" title="Вход: {{ e.tokens_in }} · Выход: {{ e.tokens_out }}{% if e.tokens_cache_read or e.tokens_cache_write %} · Кэш чтение/запись: {{ e.tokens_cache_read or 0 }}/{{ e.tokens_cache_write or 0 }}{% endif %}">
+          {{ (e.tokens_in or 0) + (e.tokens_out or 0) }} ток.{% if e.cost_usd is not none %} · ${{ '%.4f' % e.cost_usd }}{% endif %}
+        </span>
+      {% endif %}
     </div>
   </div>
 

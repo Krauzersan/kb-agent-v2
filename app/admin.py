@@ -354,6 +354,7 @@ def analytics_page(request: Request, resolved: int = 0, topic: str = "",
         "overview": db.rating_overview(d_from, d_to), "users": db.rating_stats_by_user(d_from, d_to),
         "hist": charts.rating_histogram(db.rating_distribution(d_from, d_to)),
         "trend": charts.questions_trend(db.questions_per_day(30, d_from, d_to)),
+        "usage": db.usage_totals(d_from, d_to),
     })
     return templates.TemplateResponse("analytics.html", ctx)
 

@@ -12,6 +12,7 @@ import mapreduce
 import reranker
 import router
 import settings_store
+import usage_tracker
 import vectorstore
 
 log = logging.getLogger("rag")
@@ -274,16 +275,20 @@ def answer_question(question: str, history=None, channel: str = "internal",
 
     thread_key/asker_* (Пачка) — для метрик: кто чаще спрашивает и как оценивает ответы.
     """
+    # Сброс ДО первого вызова модели — один вопрос может дойти до провайдера несколько
+    # раз (роутер, DEEP-декомпозиция/сборка, map/reduce), см. usage_tracker.py.
+    usage_tracker.reset()
     result = _answer_question(question, history=history, channel=channel)
+    usage = usage_tracker.totals()
     try:
-        _log_answer(question, channel, result, thread_key, asker_user_id, asker_name)
+        _log_answer(question, channel, result, thread_key, asker_user_id, asker_name, usage)
     except Exception:
         log.exception("Не удалось записать лог запроса")
     return result
 
 
 def _log_answer(question: str, channel: str, result: dict, thread_key: str = None,
-                asker_user_id: int = None, asker_name: str = None) -> None:
+                asker_user_id: int = None, asker_name: str = None, usage: dict = None) -> None:
     hits = result.get("hits") or []
     sources, seen = [], set()
     for h in hits[:20]:
@@ -300,7 +305,8 @@ def _log_answer(question: str, channel: str, result: dict, thread_key: str = Non
         })
     db.log_query(channel, result.get("mode") or "top_k", question or "",
                  result.get("answer") or "", sources,
-                 thread_key=thread_key, asker_user_id=asker_user_id, asker_name=asker_name)
+                 thread_key=thread_key, asker_user_id=asker_user_id, asker_name=asker_name,
+                 usage=usage)
 
 
 def _answer_question(question: str, history=None, channel: str = "internal") -> dict:

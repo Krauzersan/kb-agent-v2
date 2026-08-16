@@ -8,6 +8,7 @@ import anthropic
 import httpx
 
 import settings_store
+import usage_tracker
 
 log = logging.getLogger("claude_client")
 
@@ -330,6 +331,18 @@ def ask(question: str, hits: List[dict], history=None, channel: str = "internal"
                 final = stream.get_final_message()
             except Exception:
                 final = None
+        # Учитываем usage КАЖДОЙ попытки (в т.ч. пустой/повторной) — Anthropic
+        # выставляет счёт за реально потраченные токены независимо от того, дошёл
+        # ли до пользователя видимый текст (см. _MIN_TOKENS_FOR_EFFORT выше).
+        usage = getattr(final, "usage", None) if final is not None else None
+        if usage is not None:
+            usage_tracker.record(
+                "claude", model,
+                input_tokens=getattr(usage, "input_tokens", 0) or 0,
+                output_tokens=getattr(usage, "output_tokens", 0) or 0,
+                cache_creation_tokens=getattr(usage, "cache_creation_input_tokens", 0) or 0,
+                cache_read_tokens=getattr(usage, "cache_read_input_tokens", 0) or 0,
+            )
         # Модели с усиленными классификаторами безопасности (Opus 5, Fable 5) иногда
         # отклоняют запрос по стоп-причине "refusal" вместо пустого ответа — повтор
         # тут не поможет (это не сетевой сбой), поэтому не тратим вторую попытку.
@@ -364,5 +377,14 @@ def complete(system: str, user: str, max_tokens: int = 400) -> str:
         messages=[{"role": "user", "content": user}],
         output_config={"effort": "low"},
     )
+    usage = getattr(resp, "usage", None)
+    if usage is not None:
+        usage_tracker.record(
+            "claude", model,
+            input_tokens=getattr(usage, "input_tokens", 0) or 0,
+            output_tokens=getattr(usage, "output_tokens", 0) or 0,
+            cache_creation_tokens=getattr(usage, "cache_creation_input_tokens", 0) or 0,
+            cache_read_tokens=getattr(usage, "cache_read_input_tokens", 0) or 0,
+        )
     parts = [b.text for b in resp.content if getattr(b, "type", "") == "text"]
     return "".join(parts).strip()
