@@ -368,46 +368,16 @@ def _period_label(period: str, d_from: str, d_to: str) -> str:
 @router.get("/admin/analytics", response_class=HTMLResponse)
 def analytics_page(request: Request, resolved: int = 0, topic: str = "",
                     period: str = "all", date_from: str = "", date_to: str = ""):
-    """Объединённая страница «Аналитика»: оценки ответов (бывшие «Метрики») +
-    темы/пробелы — разделены вкладками на одной странице, см. analytics.html.
-    period — выбор периода (7/30/90 дней, custom с датами, all — весь период,
-    по умолчанию), применяется ко всем графикам/таблицам обеих вкладок."""
-    auth.require_login(request)
-    ctx = _base_ctx(request)
-    d_from, d_to = _resolve_period(period, date_from, date_to)
-    stats = db.topic_stats(d_from, d_to)
-    gaps = sorted(
-        [t for t in stats if t["no_sources"] > 0],
-        key=lambda t: t["no_sources"], reverse=True,
-    )
-    ctx.update({
-        # выбор периода
-        "period": period, "date_from": date_from, "date_to": date_to,
-        "period_label": _period_label(period, d_from or "", d_to or ""),
-        # вкладка «Темы и пробелы»
-        "topics": stats, "gaps": gaps,
-        "untagged": db.count_untagged(),
-        "resolved_count": resolved, "resolved_topic": topic,
-        "topic_chart": charts.topic_bars(stats),
-        # вкладка «Оценки ответов»
-        "overview": db.rating_overview(d_from, d_to), "users": db.rating_stats_by_user(d_from, d_to),
-        "hist": charts.rating_histogram(db.rating_distribution(d_from, d_to)),
-        "trend": charts.questions_trend(db.questions_per_day(30, d_from, d_to)),
-        "usage": db.usage_totals(d_from, d_to, is_test=False),
-        "usage_test": db.usage_totals(d_from, d_to, is_test=True),
-    })
-    return templates.TemplateResponse("analytics.html", ctx)
+    """Аналитика: стоимость/токены, оценки ответов и темы/пробелы — на одной
+    странице, разделены вкладками, см. analytics.html. period — выбор периода
+    (7/30/90 дней, custom с датами, all — весь период, по умолчанию), применяется
+    ко всем графикам/таблицам.
 
-
-@router.get("/admin/report", response_class=HTMLResponse)
-def report_page(request: Request, period: str = "30", date_from: str = "", date_to: str = ""):
-    """Отчёт на экране: сводка по стоимости, оценкам и пробелам в базе за выбранный
-    период — на экран, а не на почту/в Пачку и не файлом. В отличие от страницы
-    «Аналитика» (снимок текущего состояния) отчёт сравнивает период с предыдущим
-    такой же длины — дельта по стоимости/оценке и НОВЫЕ пробелы (темы, которых не
-    было в пробелах прошлый раз) — это то, что стоит проверять при каждом заходе,
-    а не просто повторение дашборда. По умолчанию — последние 30 дней, а не «весь
-    период», как в аналитике: отчёт по смыслу — снимок за недавнее время."""
+    Сверху страницы — сравнение с ПРЕДЫДУЩИМ периодом той же длины (дельта по
+    стоимости/оценке, новые пробелы в базе — темы, которых не было в пробелах
+    прошлый раз). Раньше это был отдельный «Отчёт» на /admin/report, но по сути
+    он копировал те же карточки, что уже есть здесь, только добавлял дельту —
+    вместо второй страницы дельта встроена прямо сюда (см. _delta, _previous_period)."""
     auth.require_login(request)
     ctx = _base_ctx(request)
     d_from, d_to = _resolve_period(period, date_from, date_to)
@@ -434,21 +404,35 @@ def report_page(request: Request, period: str = "30", date_from: str = "", date_
     gaps.sort(key=lambda g: (not g["is_new"], -g["no_sources"]))
 
     ctx.update({
+        # выбор периода
         "period": period, "date_from": date_from, "date_to": date_to,
         "period_label": _period_label(period, d_from or "", d_to or ""),
         "has_comparison": bool(prev_from),
-        "prev_period_label": _period_label("custom", prev_from or "", prev_to or "") if prev_from else "",
-        "overview": overview, "overview_prev": overview_prev,
-        "users": db.rating_stats_by_user(d_from, d_to),
-        "usage": usage, "usage_prev": usage_prev,
-        "usage_test": db.usage_totals(d_from, d_to, is_test=True),
-        "cost_delta": _delta(usage.get("cost_usd"), usage_prev.get("cost_usd") if usage_prev else None, higher_is_better=False),
-        "rating_delta": _delta(overview.get("avg_rating"), overview_prev.get("avg_rating") if overview_prev else None, higher_is_better=True),
-        "questions_delta": _delta(usage.get("questions"), usage_prev.get("questions") if usage_prev else None),
+        # вкладка «Темы и пробелы»
         "topics": stats, "gaps": gaps, "new_gaps_count": new_gaps_count,
         "untagged": db.count_untagged(),
+        "resolved_count": resolved, "resolved_topic": topic,
+        "topic_chart": charts.topic_bars(stats),
+        # вкладка «Оценки ответов»
+        "overview": overview, "users": db.rating_stats_by_user(d_from, d_to),
+        "hist": charts.rating_histogram(db.rating_distribution(d_from, d_to)),
+        "trend": charts.questions_trend(db.questions_per_day(30, d_from, d_to)),
+        "usage": usage, "usage_test": db.usage_totals(d_from, d_to, is_test=True),
+        # дельты к прошлому периоду (шапка страницы)
+        "cost_delta": _delta(usage.get("cost_usd"), usage_prev.get("cost_usd") if usage_prev else None, higher_is_better=False),
+        "rating_delta": _delta(overview.get("avg_rating"), overview_prev.get("avg_rating") if overview_prev else None, higher_is_better=True),
     })
-    return templates.TemplateResponse("report.html", ctx)
+    return templates.TemplateResponse("analytics.html", ctx)
+
+
+@router.get("/admin/report")
+def report_page_redirect(period: str = "30", date_from: str = "", date_to: str = ""):
+    """Отдельная страница «Отчёт» объединена в «Аналитику» (дублировала те же
+    карточки) — редирект на случай старых закладок/ссылок."""
+    return RedirectResponse(
+        f"/admin/analytics?period={period}&date_from={date_from}&date_to={date_to}",
+        status_code=HTTP_303_SEE_OTHER,
+    )
 
 
 @router.get("/admin/analytics/topic/{topic_name}", response_class=HTMLResponse)

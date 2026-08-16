@@ -33,6 +33,33 @@
   .viz-dot:hover, .viz-dot:focus-visible{r:6px; outline:none}
   .viz-tier-legend{display:flex; gap:14px; align-items:center; margin-top:10px; font-size:12px; color:var(--muted)}
   .viz-tier-legend .dot{display:inline-block; width:9px; height:9px; border-radius:50%; margin-right:5px; vertical-align:-1px}
+
+  /* Пульс — «что изменилось к прошлому периоду», открывающий раздел. Три равные
+     колонки с цветной полоской сверху (по смыслу дельты — хорошо/плохо/нейтрально),
+     крупная цифра + компактная дельта рядом. Это единственное место на странице,
+     где показывается дельта — карточки ниже дают абсолютные цифры без повторов. */
+  .pulse{display:grid; grid-template-columns:repeat(3,1fr); border:1px solid var(--line);
+    border-radius:var(--r); background:var(--surface); box-shadow:var(--shadow-sm);
+    overflow:hidden; margin-bottom:22px}
+  .pulse-item{padding:17px 20px; position:relative}
+  .pulse-item + .pulse-item{border-left:1px solid var(--line)}
+  .pulse-item::before{content:''; position:absolute; top:0; left:0; right:0; height:3px}
+  .pulse-item.good::before{background:var(--ok)}
+  .pulse-item.bad::before{background:var(--err)}
+  .pulse-item.neutral::before{background:var(--line-2)}
+  .pulse-label{font-size:11px; letter-spacing:.05em; text-transform:uppercase; color:var(--faint); margin-bottom:8px; font-weight:650}
+  .pulse-num{font-size:25px; font-weight:650; font-variant-numeric:tabular-nums; letter-spacing:-.01em}
+  .pulse-delta{font-size:12.5px; font-weight:650; margin-left:8px}
+  .pulse-delta.good{color:var(--ok)}
+  .pulse-delta.bad{color:var(--err)}
+  .pulse-delta.neutral{color:var(--muted)}
+  .pulse-sub{font-size:12px; color:var(--muted); margin-top:4px}
+  @media (max-width:760px){
+    .pulse{grid-template-columns:1fr}
+    .pulse-item + .pulse-item{border-left:none; border-top:1px solid var(--line)}
+  }
+
+  .badge.new{background:var(--accent-weak); color:var(--accent-text)}
 </style>
 {% endblock %}
 
@@ -46,11 +73,7 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M12 3v12m0 0-4-4m4 4 4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></svg>
     Скачать Excel-отчёт
   </a>
-  <a class="btn ghost" href="/admin/report?period={{ period }}&date_from={{ date_from }}&date_to={{ date_to }}">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2Z"/><path d="M9 13h6M9 17h6M9 9h1"/></svg>
-    Показать отчёт
-  </a>
-  <span class="hint">Excel — обзор, проблемные ответы и полный лог одним файлом. Отчёт — что изменилось по сравнению с прошлым периодом: стоимость, оценка, новые пробелы в базе.</span>
+  <span class="hint">Обзор (с дайджестом за неделю), проблемные ответы (низкая оценка или ответ без опоры на базу) и полный лог — одним файлом.</span>
 </div>
 
 <div class="period-bar">
@@ -71,11 +94,43 @@
   <span class="period-note">Показано {{ period_label }}</span>
 </div>
 
+{% if has_comparison %}
+<div class="pulse" role="group" aria-label="Изменения к прошлому периоду">
+  <div class="pulse-item {{ cost_delta.tone if cost_delta else 'neutral' }}">
+    <div class="pulse-label">Стоимость (боевые)</div>
+    <div>
+      <span class="pulse-num">{% if usage.cost_usd is none %}—{% else %}${{ '%.4f' % usage.cost_usd }}{% endif %}</span>
+      {% if cost_delta and cost_delta.abs_pct is not none %}<span class="pulse-delta {{ cost_delta.tone }}">{{ cost_delta.arrow }} {{ '%.0f' % cost_delta.abs_pct }}%</span>{% endif %}
+    </div>
+    <div class="pulse-sub">
+      {% if usage.cost_usd is not none and usage.questions %}≈ ${{ '%.5f' % (usage.cost_usd / usage.questions) }} за вопрос ({{ usage.questions }}) к прошлому периоду
+      {% else %}к прошлому периоду{% endif %}
+    </div>
+  </div>
+  <div class="pulse-item {{ rating_delta.tone if rating_delta else 'neutral' }}">
+    <div class="pulse-label">Средняя оценка</div>
+    <div>
+      <span class="pulse-num">{{ overview.avg_rating if overview.avg_rating is not none else '—' }}{% if overview.avg_rating is not none %}<span style="font-size:14px;color:var(--faint)">/10</span>{% endif %}</span>
+      {% if rating_delta %}<span class="pulse-delta {{ rating_delta.tone }}">{{ rating_delta.arrow }} {{ '%.1f' % rating_delta.abs_value }}</span>{% endif %}
+    </div>
+    <div class="pulse-sub">к прошлому периоду</div>
+  </div>
+  <div class="pulse-item {{ 'bad' if new_gaps_count else 'neutral' }}">
+    <div class="pulse-label">Новые пробелы в базе</div>
+    <div><span class="pulse-num">{{ new_gaps_count }}</span></div>
+    <div class="pulse-sub">{% if new_gaps_count %}тем без источников, которых не было в пробелах прошлый раз{% else %}новых пробелов не появилось{% endif %}</div>
+  </div>
+</div>
+{% else %}
+<p class="hint" style="margin:-10px 0 20px">Сравнение с прошлым периодом недоступно для «Весь период» — выберите 7, 30, 90 дней или свой диапазон, чтобы видеть, что изменилось.</p>
+{% endif %}
+
 <div class="card" style="margin-bottom:18px">
-  <h2>Токены и стоимость</h2>
+  <h2>{% if has_comparison %}Расход токенов{% else %}Токены и стоимость{% endif %}</h2>
   <p class="desc">Боевые каналы (Пачка, Omnidesk, Telegram, WhatsApp) — отдельно от тестов со страницы
     «Тест агента» в панели, которые ничего не стоят клиентам, но тоже тратят токены. {{ period_label }}.</p>
-  <div class="grid c4">
+  <div class="grid {{ 'c3' if has_comparison else 'c4' }}">
+    {% if not has_comparison %}
     <div class="stat">
       <div class="k">Стоимость (боевые)</div>
       <div class="v" style="{% if usage.cost_usd is none %}font-size:20px; color:var(--muted){% endif %}">
@@ -89,6 +144,7 @@
         {% else %}пока нет данных за этот период{% endif %}
       </div>
     </div>
+    {% endif %}
     <div class="stat">
       <div class="k">Входные токены</div>
       <div class="v">{{ '{:,}'.format(usage.tokens_in).replace(',', ' ') }}</div>
@@ -308,7 +364,10 @@
       <tbody>
         {% for t in gaps %}
         <tr>
-          <td><a href="/admin/analytics/topic/{{ t.topic | urlencode }}">{{ t.topic }}</a></td>
+          <td>
+            <a href="/admin/analytics/topic/{{ t.topic | urlencode }}">{{ t.topic }}</a>
+            {% if has_comparison and t.is_new %}<span class="badge new">🆕 новый</span>{% endif %}
+          </td>
           <td style="text-align:right">{{ t.questions }}</td>
           <td style="text-align:right"><span class="badge err">{{ t.no_sources }}</span></td>
           <td style="text-align:right">
