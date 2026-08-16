@@ -268,12 +268,16 @@ def _backfill_cosine(hits: list, question: str) -> None:
 
 def answer_question(question: str, history=None, channel: str = "internal",
                     thread_key: str = None, asker_user_id: int = None,
-                    asker_name: str = None) -> dict:
+                    asker_name: str = None, is_test: bool = False) -> dict:
     """Тонкая обёртка вокруг _answer_question — только чтобы залогировать вопрос и
     источники в query_log (отладочная панель), не трогая саму логику ответа ни в одном
     из её путей (обычный top-k, каталог, full-scan).
 
     thread_key/asker_* (Пачка) — для метрик: кто чаще спрашивает и как оценивает ответы.
+    is_test — вопрос пришёл со страницы «Тест агента» в панели (единственный вызывающий
+    её код — admin.api_ask), а не из боевого канала (Пачка/Omnidesk/Telegram/WhatsApp).
+    Пишется в query_log, чтобы отделять стоимость тестов от реальных трат — см.
+    db.usage_totals(is_test=...).
     """
     # Сброс ДО первого вызова модели — один вопрос может дойти до провайдера несколько
     # раз (роутер, DEEP-декомпозиция/сборка, map/reduce), см. usage_tracker.py.
@@ -281,14 +285,15 @@ def answer_question(question: str, history=None, channel: str = "internal",
     result = _answer_question(question, history=history, channel=channel)
     usage = usage_tracker.totals()
     try:
-        _log_answer(question, channel, result, thread_key, asker_user_id, asker_name, usage)
+        _log_answer(question, channel, result, thread_key, asker_user_id, asker_name, usage, is_test)
     except Exception:
         log.exception("Не удалось записать лог запроса")
     return result
 
 
 def _log_answer(question: str, channel: str, result: dict, thread_key: str = None,
-                asker_user_id: int = None, asker_name: str = None, usage: dict = None) -> None:
+                asker_user_id: int = None, asker_name: str = None, usage: dict = None,
+                is_test: bool = False) -> None:
     hits = result.get("hits") or []
     sources, seen = [], set()
     for h in hits[:20]:
@@ -306,7 +311,7 @@ def _log_answer(question: str, channel: str, result: dict, thread_key: str = Non
     db.log_query(channel, result.get("mode") or "top_k", question or "",
                  result.get("answer") or "", sources,
                  thread_key=thread_key, asker_user_id=asker_user_id, asker_name=asker_name,
-                 usage=usage)
+                 usage=usage, is_test=is_test)
 
 
 def _answer_question(question: str, history=None, channel: str = "internal") -> dict:

@@ -222,7 +222,8 @@ async def api_ask(request: Request):
     if not question:
         return JSONResponse({"answer": "Пустой вопрос.", "sources": [], "hits": []})
     try:
-        result = await run_in_threadpool(rag.answer_question, question, history=history, channel=channel)
+        result = await run_in_threadpool(rag.answer_question, question, history=history,
+                                          channel=channel, is_test=True)
     except Exception as e:  # noqa: BLE001
         log.exception("Тест агента: ошибка ответа")
         return JSONResponse({"answer": f"Ошибка: {e}", "sources": [], "hits": []}, status_code=200)
@@ -354,7 +355,8 @@ def analytics_page(request: Request, resolved: int = 0, topic: str = "",
         "overview": db.rating_overview(d_from, d_to), "users": db.rating_stats_by_user(d_from, d_to),
         "hist": charts.rating_histogram(db.rating_distribution(d_from, d_to)),
         "trend": charts.questions_trend(db.questions_per_day(30, d_from, d_to)),
-        "usage": db.usage_totals(d_from, d_to),
+        "usage": db.usage_totals(d_from, d_to, is_test=False),
+        "usage_test": db.usage_totals(d_from, d_to, is_test=True),
     })
     return templates.TemplateResponse("analytics.html", ctx)
 

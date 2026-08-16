@@ -43,6 +43,7 @@
       <span class="badge neutral">{{ e.created_at }}</span>
       <span class="badge {% if e.channel == 'external' %}warn{% elif e.asker_name %}accent{% else %}neutral{% endif %}">
         {% if e.channel == 'external' %}внешний (Omnidesk){% elif e.asker_name %}внутренний (Пачка){% else %}внутренний{% endif %}</span>
+      {% if e.is_test %}<span class="badge neutral" title="Задан со страницы «Тест агента» — не боевой вопрос">тест</span>{% endif %}
       {% if e.mode and e.mode != 'top_k' %}<span class="badge neutral">режим: {{ e.mode }}</span>{% endif %}
       {% if e.asker_name %}<span class="badge neutral">{{ e.asker_name }}</span>{% endif %}
       {% if e.rating is not none %}

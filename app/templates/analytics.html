@@ -84,11 +84,11 @@
 
 <div class="card" style="margin-bottom:18px">
   <h2>Токены и стоимость</h2>
-  <p class="desc">Сколько токенов потратили у LLM-провайдера и сколько это стоило — по всем каналам,
-    включая «Тест агента» в панели, {{ period_label }}.</p>
+  <p class="desc">Боевые каналы (Пачка, Omnidesk, Telegram, WhatsApp) — отдельно от тестов со страницы
+    «Тест агента» в панели, которые ничего не стоят клиентам, но тоже тратят токены. {{ period_label }}.</p>
   <div class="grid c4">
     <div class="stat">
-      <div class="k">Стоимость</div>
+      <div class="k">Стоимость (боевые)</div>
       <div class="v" style="{% if usage.cost_usd is none %}font-size:20px; color:var(--muted){% endif %}">
         {% if not usage.questions %}<span class="faint">—</span>
         {% elif usage.cost_usd is none %}неизвестно
@@ -118,6 +118,20 @@
       <div class="s">чтение дешевле обычного входа</div>
     </div>
   </div>
+
+  {% if usage_test.questions %}
+  <div class="row" style="justify-content:space-between; align-items:center; margin-top:14px; padding-top:14px; border-top:1px solid var(--line)">
+    <div class="row" style="gap:8px; color:var(--muted); font-size:13px">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" style="width:15px;height:15px;flex:none"><path d="M9 3h6M10 3v5.5L4.5 18a1 1 0 0 0 .87 1.5h13.26a1 1 0 0 0 .87-1.5L14 8.5V3"/></svg>
+      Тесты в панели: {{ usage_test.questions }} вопрос(ов),
+      {{ '{:,}'.format(usage_test.tokens_in + usage_test.tokens_out).replace(',', ' ') }} ток.
+    </div>
+    <span class="badge neutral">
+      {% if usage_test.cost_usd is none %}стоимость неизвестна{% else %}${{ '%.4f' % usage_test.cost_usd }}{% endif %}
+      — не входит в счёт клиентам
+    </span>
+  </div>
+  {% endif %}
 </div>
 
 <div class="tabs" id="tabs">

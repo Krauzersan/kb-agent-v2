@@ -136,6 +136,14 @@ def init_db() -> None:
             con.execute("ALTER TABLE query_log ADD COLUMN tokens_cache_read INTEGER")
         if "cost_usd" not in cols:
             con.execute("ALTER TABLE query_log ADD COLUMN cost_usd REAL")
+        # Тестовый вопрос (страница «Тест агента» в панели) vs боевой (Пачка/Omnidesk/
+        # Telegram/WhatsApp) — единственный надёжный признак, т.к. thread_key/asker_*
+        # у боевого Omnidesk тоже бывают пустыми (см. omnidesk_webhook.py), различать
+        # по ним нельзя. Проставляется явно в /admin/api/ask (единственный вызывающий
+        # код панели теста) — см. rag.answer_question(is_test=...). Старые строки до
+        # этой миграции остаются is_test=0 (боевые) — ретроактивно не разметить надёжно.
+        if "is_test" not in cols:
+            con.execute("ALTER TABLE query_log ADD COLUMN is_test INTEGER NOT NULL DEFAULT 0")
 
         # Без индексов эти колонки сканируются полностью на каждый запрос — аналитика,
         # темы/пробелы, история конкретного треда/пользователя. С ростом лога (тысячи
@@ -429,19 +437,19 @@ def search_fts(query: str, limit: int = 50) -> list:
 
 def log_query(channel: str, mode: str, question: str, answer: str, sources: list,
               thread_key: str = None, asker_user_id: int = None, asker_name: str = None,
-              usage: dict = None) -> int:
+              usage: dict = None, is_test: bool = False) -> int:
     usage = usage or {}
     with _lock, _conn() as con:
         cur = con.execute(
             "INSERT INTO query_log (created_at, channel, mode, question, answer, sources, "
             "thread_key, asker_user_id, asker_name, tokens_in, tokens_out, "
-            "tokens_cache_write, tokens_cache_read, cost_usd) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "tokens_cache_write, tokens_cache_read, cost_usd, is_test) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (_now(), channel, mode, question, answer,
              json.dumps(sources, ensure_ascii=False), thread_key, asker_user_id, asker_name,
              usage.get("tokens_in"), usage.get("tokens_out"),
              usage.get("cache_write_tokens"), usage.get("cache_read_tokens"),
-             usage.get("cost_usd")),
+             usage.get("cost_usd"), 1 if is_test else 0),
         )
         return int(cur.lastrowid)
 
@@ -555,13 +563,19 @@ def questions_per_day(days: int = 30, date_from: str | None = None, date_to: str
     return out
 
 
-def usage_totals(date_from: str | None = None, date_to: str | None = None) -> dict:
-    """Токены/стоимость за период — по ВСЕМ каналам (включая «Тест агента» в панели),
-    в отличие от rating_overview/rating_stats_by_user (только реальные вопросы Пачки):
-    трата денег у провайдера не зависит от того, тестовый это вопрос или нет.
-    cost_usd = NULL, если хотя бы у одной строки период стоимость неизвестна
+def usage_totals(date_from: str | None = None, date_to: str | None = None,
+                  is_test: bool | None = None) -> dict:
+    """Токены/стоимость за период. is_test=None — все вопросы (боевые + тесты из
+    панели), is_test=False — только боевые (Пачка/Omnidesk/Telegram/WhatsApp),
+    is_test=True — только тесты («Тест агента» в панели, см. log_query). В отличие от
+    rating_overview/rating_stats_by_user (только вопросы в тредах Пачки) считает по
+    ВСЕМ каналам — трата денег у провайдера не зависит от того, откуда пришёл вопрос.
+    cost_usd = NULL, если хотя бы у одной строки периода стоимость неизвестна
     (см. usage_tracker.py — провайдер/модель без цены в таблице), иначе сумма."""
     extra, params = _period_clause(date_from, date_to)
+    if is_test is not None:
+        extra += " AND is_test = ?"
+        params = params + [1 if is_test else 0]
     with _lock, _conn() as con:
         row = con.execute(
             "SELECT COUNT(*) AS questions, "
