@@ -1,4 +1,6 @@
 """Учёт файлов базы знаний в SQLite (имя, статус индексации, число кусков)."""
+from __future__ import annotations
+
 import json
 import os
 import re
