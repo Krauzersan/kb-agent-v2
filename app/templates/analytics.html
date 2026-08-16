@@ -232,7 +232,7 @@
           <span><span class="dot" style="background:var(--ok)"></span>8–10</span>
         </div>
       {% else %}
-        <div class="empty"><div class="ico">📊</div>Пока нет оценённых ответов.</div>
+        <div class="empty"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg></div>Пока нет оценённых ответов.</div>
       {% endif %}
     </div>
 
@@ -252,7 +252,7 @@
           {% endfor %}
         </svg>
       {% else %}
-        <div class="empty"><div class="ico">📈</div>Пока нет данных за этот период.</div>
+        <div class="empty"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M23 6l-9.5 9.5-5-5L1 18"/><path d="M17 6h6v6"/></svg></div>Пока нет данных за этот период.</div>
       {% endif %}
     </div>
   </div>
@@ -293,7 +293,7 @@
     </table>
     </div>
   {% else %}
-  <div class="card"><div class="empty"><div class="ico">📊</div>
+  <div class="card"><div class="empty"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg></div>
     Пока нет ни одного вопроса, заданного в треде Пачки.
   </div></div>
   {% endif %}
@@ -327,7 +327,8 @@
     </p>
     <form method="post" action="/admin/analytics/backfill">
       <button class="ghost" type="submit" {{ 'disabled' if not untagged else '' }}>
-        🏷 Обновить анализ ({{ untagged }})
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20.59 13.41L11 3.83V2a1 1 0 0 0-1-1H2a1 1 0 0 0-1 1v8a1 1 0 0 0 .29.71l9.58 9.58a2 2 0 0 0 2.83 0l8.89-8.89a2 2 0 0 0 0-2.83z"/><circle cx="6" cy="6" r="1" fill="currentColor" stroke="none"/></svg>
+        Обновить анализ ({{ untagged }})
       </button>
     </form>
   </div>
@@ -366,7 +367,7 @@
         <tr>
           <td>
             <a href="/admin/analytics/topic/{{ t.topic | urlencode }}">{{ t.topic }}</a>
-            {% if has_comparison and t.is_new %}<span class="badge new">🆕 новый</span>{% endif %}
+            {% if has_comparison and t.is_new %}<span class="badge new"><span class="dot"></span>новый</span>{% endif %}
           </td>
           <td style="text-align:right">{{ t.questions }}</td>
           <td style="text-align:right"><span class="badge err">{{ t.no_sources }}</span></td>
@@ -378,7 +379,8 @@
             <form method="post" action="/admin/analytics/topic/{{ t.topic | urlencode }}/resolve"
                   style="display:inline" onsubmit="return confirm('Пометить {{ t.no_sources }} ответ(ов) по теме «{{ t.topic }}» исправленными?');">
               <button class="ghost sm" type="submit" title="Я дополнил базу — эти старые ответы больше не пробел">
-                ✓ Исправлено
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M20 6L9 17l-5-5"/></svg>
+                Исправлено
               </button>
             </form>
           </td>
@@ -422,7 +424,7 @@
     </div>
   </div>
   {% else %}
-  <div class="card"><div class="empty"><div class="ico">📊</div>
+  <div class="card"><div class="empty"><div class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M3 3v18h18"/><path d="M18 17V9M13 17V5M8 17v-3"/></svg></div>
     Пока нет ни одной размеченной темы — нажмите «Обновить анализ» выше.
   </div></div>
   {% endif %}
